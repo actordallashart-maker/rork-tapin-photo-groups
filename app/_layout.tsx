@@ -2,9 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import Constants from 'expo-constants';
 import { AppDataProvider } from "@/providers/AppDataProvider";
+import ConfigBlocker from "@/components/ConfigBlocker";
 import Colors from "@/constants/colors";
 
 SplashScreen.preventAutoHideAsync();
@@ -38,10 +40,56 @@ function RootLayoutNav() {
   );
 }
 
+function checkRequiredConfig(): string[] {
+  const missing: string[] = [];
+  const env = Constants.expoConfig?.extra || {};
+  
+  const supabaseUrl = env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseKey = env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const firebaseApiKey = env.EXPO_PUBLIC_FIREBASE_API_KEY;
+  const firebaseProjectId = env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+  const apiBaseUrl = env.EXPO_PUBLIC_API_BASE_URL;
+  
+  const hasSupabase = supabaseUrl && supabaseKey;
+  const hasFirebase = firebaseApiKey && firebaseProjectId;
+  const hasCustomApi = apiBaseUrl;
+  
+  if (!hasSupabase && !hasFirebase && !hasCustomApi) {
+    missing.push('EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_ANON_KEY');
+    missing.push('OR');
+    missing.push('EXPO_PUBLIC_FIREBASE_API_KEY', 'EXPO_PUBLIC_FIREBASE_PROJECT_ID');
+    missing.push('OR');
+    missing.push('EXPO_PUBLIC_API_BASE_URL');
+  }
+  
+  return missing;
+}
+
 export default function RootLayout() {
+  const [missingKeys, setMissingKeys] = useState<string[]>([]);
+  const [isChecking, setIsChecking] = useState(true);
+
   useEffect(() => {
     SplashScreen.hideAsync();
+    const missing = checkRequiredConfig();
+    setMissingKeys(missing);
+    setIsChecking(false);
   }, []);
+
+  if (isChecking) {
+    return null;
+  }
+
+  if (missingKeys.length > 0) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <StatusBar style="light" />
+          <ConfigBlocker missingKeys={missingKeys} />
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

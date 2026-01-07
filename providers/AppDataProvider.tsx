@@ -3,7 +3,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback, useMemo } from 'react';
 import { Group, TodayPhoto, BlitzRound, BlitzPhoto, AppData, TextOverlay } from '@/types';
-import { createInitialMockData } from '@/mocks/data';
 import { getRandomPrompt } from '@/constants/blitz-prompts';
 
 const STORAGE_KEY_MAIN = 'tapin_app_data';
@@ -13,7 +12,7 @@ const STORAGE_KEY_ROUNDS = 'tapin_blitz_round_state_v1';
 const STORAGE_KEY_USER_ID = 'tapin_active_user_id';
 const STORAGE_KEY_TODAY_CYCLE = 'tapin_today_cycle_state_v1';
 
-const generateUserId = () => `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
 
 const getTodayDateKey = (): string => {
   const now = new Date();
@@ -62,13 +61,10 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     queryFn: async (): Promise<AppData> => {
       console.log('[AppData] Loading from AsyncStorage...');
       
-      let userId = await AsyncStorage.getItem(STORAGE_KEY_USER_ID);
-      if (!userId) {
-        userId = generateUserId();
-        await AsyncStorage.setItem(STORAGE_KEY_USER_ID, userId);
-        console.log('[AppData] Generated new user ID:', userId);
+      const userId = await AsyncStorage.getItem(STORAGE_KEY_USER_ID);
+      if (userId) {
+        setActiveUserId(userId);
       }
-      setActiveUserId(userId);
       
       const stored = await AsyncStorage.getItem(STORAGE_KEY_MAIN);
       if (stored) {
@@ -93,15 +89,21 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
         setLastUpdateSource('hydrate');
         return data;
       }
-      console.log('[AppData] No stored data, using initial mock');
-      const initial = createInitialMockData();
-      await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(initial));
-      await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify(initial.todayPhotos));
-      await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify(initial.blitzPhotos));
-      await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify(initial.blitzRounds));
+      
+      console.log('[AppData] No stored data, initializing empty state');
+      const emptyData: AppData = {
+        groups: [],
+        todayPhotos: [],
+        blitzRounds: [],
+        blitzPhotos: [],
+      };
+      await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(emptyData));
+      await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify([]));
+      await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify([]));
+      await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify([]));
       setIsHydrated(true);
       setLastUpdateSource('hydrate');
-      return initial;
+      return emptyData;
     },
   });
 
@@ -335,15 +337,7 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     [data, saveMutate]
   );
 
-  const seedMockData = useCallback(async () => {
-    console.log('[AppData] Seeding mock data...');
-    const initial = createInitialMockData();
-    await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(initial));
-    await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify(initial.todayPhotos));
-    await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify(initial.blitzPhotos));
-    await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify(initial.blitzRounds));
-    queryClient.invalidateQueries({ queryKey: ['appData'] });
-  }, [queryClient]);
+
 
   const clearAllData = useCallback(async () => {
     console.log('[AppData] Clearing all data...');
@@ -352,7 +346,7 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
   }, [queryClient]);
 
   const resetToFirstLaunch = useCallback(async () => {
-    console.log('[AppData] Resetting to first launch state...');
+    console.log('[AppData] Clearing all local data...');
     await AsyncStorage.multiRemove([
       STORAGE_KEY_MAIN,
       STORAGE_KEY_TODAY,
@@ -362,16 +356,19 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
       STORAGE_KEY_TODAY_CYCLE,
     ]);
     
-    const newUserId = generateUserId();
-    await AsyncStorage.setItem(STORAGE_KEY_USER_ID, newUserId);
-    setActiveUserId(newUserId);
-    console.log('[AppData] Generated new user ID after reset:', newUserId);
+    setActiveUserId('');
+    console.log('[AppData] All local data cleared - auth required for new session');
     
-    const initial = createInitialMockData();
-    await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(initial));
-    await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify(initial.todayPhotos));
-    await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify(initial.blitzPhotos));
-    await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify(initial.blitzRounds));
+    const emptyData: AppData = {
+      groups: [],
+      todayPhotos: [],
+      blitzRounds: [],
+      blitzPhotos: [],
+    };
+    await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(emptyData));
+    await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify([]));
+    await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify([]));
+    await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify([]));
     
     setIsHydrated(false);
     queryClient.invalidateQueries({ queryKey: ['appData'] });
@@ -526,7 +523,6 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     addBlitzPhoto,
     updateBlitzPhotoPosition,
     endBlitzRound,
-    seedMockData,
     clearAllData,
     resetToFirstLaunch,
     addGroup,

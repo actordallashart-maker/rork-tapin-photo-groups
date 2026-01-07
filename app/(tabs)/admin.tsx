@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
-  Database, 
   Trash2, 
   Clock, 
   ImagePlus, 
@@ -18,7 +17,6 @@ export default function AdminScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const {
-    seedMockData,
     clearAllData,
     resetToFirstLaunch,
     endBlitzRound,
@@ -41,11 +39,7 @@ export default function AdminScreen() {
     }
   }, []);
 
-  const handleSeedData = useCallback(async () => {
-    console.log('[Admin] Seeding mock data...');
-    await seedMockData();
-    showAlert('Success', 'Mock data seeded successfully');
-  }, [seedMockData, showAlert]);
+
 
   const handleClearData = useCallback(async () => {
     console.log('[Admin] Clearing all data...');
@@ -57,7 +51,21 @@ export default function AdminScreen() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const handleResetData = useCallback(() => {
-    setShowResetConfirm(true);
+    if (Platform.OS === 'web') {
+      const confirmed = confirm('This will clear ALL local data and require re-authentication. Type OK to confirm:');
+      if (confirmed) {
+        setShowResetConfirm(true);
+      }
+    } else {
+      Alert.alert(
+        'Reset to First Launch',
+        'This will clear ALL local data (photos, groups, user ID). You will need to re-authenticate.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', onPress: () => setShowResetConfirm(true) }
+        ]
+      );
+    }
   }, []);
 
   const handleConfirmReset = useCallback(async () => {
@@ -70,9 +78,9 @@ export default function AdminScreen() {
     setShowResetConfirm(false);
     setResetConfirmInput('');
     if (Platform.OS === 'web') {
-      alert('Reset complete. App state restored to first launch.');
+      alert('Reset complete. All local data cleared. Backend authentication required.');
     } else {
-      Alert.alert('Reset Complete', 'App state restored to first launch. New user ID generated.');
+      Alert.alert('Reset Complete', 'All local data cleared. Backend authentication required for new session.');
     }
     router.replace('/(tabs)');
   }, [resetToFirstLaunch, router, resetConfirmInput, showAlert]);
@@ -171,18 +179,6 @@ export default function AdminScreen() {
         <View style={styles.buttonList}>
           <TouchableOpacity 
             style={styles.actionButton}
-            onPress={handleSeedData}
-            activeOpacity={0.7}
-          >
-            <Database size={20} color={Colors.dark.accent} />
-            <View style={styles.buttonContent}>
-              <Text style={styles.buttonTitle}>Seed Mock Data</Text>
-              <Text style={styles.buttonSubtitle}>Reset to initial mock data</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionButton}
             onPress={handleClearData}
             activeOpacity={0.7}
           >
@@ -234,8 +230,8 @@ export default function AdminScreen() {
             >
               <RefreshCw size={20} color="#FF4444" />
               <View style={styles.buttonContent}>
-                <Text style={styles.buttonTitle}>Reset Data (First Launch)</Text>
-                <Text style={styles.buttonSubtitle}>Clear ALL app data + regenerate user ID</Text>
+                <Text style={styles.buttonTitle}>Reset Data (Clear Local Cache)</Text>
+                <Text style={styles.buttonSubtitle}>Clear ALL local data - auth required after reset</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -280,7 +276,7 @@ export default function AdminScreen() {
         <View style={styles.warningBox}>
           <RefreshCw size={16} color={Colors.dark.textSecondary} />
           <Text style={styles.warningText}>
-            Pull to refresh or switch tabs to see updates
+            Admin tools for testing. Backend integration required for production.
           </Text>
         </View>
       </ScrollView>
