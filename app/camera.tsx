@@ -6,11 +6,12 @@ import {
   TouchableOpacity,
   TextInput,
   Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { X, RotateCcw, Type, Check } from 'lucide-react-native';
+import { X, RotateCcw, Type, Check, AlertCircle } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
 import { TextOverlay } from '@/types';
 import Colors from '@/constants/colors';
@@ -18,11 +19,13 @@ import Colors from '@/constants/colors';
 const TEXT_SIZES: ('S' | 'M' | 'L')[] = ['S', 'M', 'L'];
 const TEXT_COLORS = ['#FFFFFF', '#000000', '#FF6B6B', '#4ECDC4', '#FFD93D', '#A78BFA'];
 
+type PostState = 'idle' | 'posting' | 'success' | 'error';
+
 export default function CameraScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams<{ mode: 'today' | 'blitz' }>();
-  const { addTodayPhoto, addBlitzPhoto } = useAppData();
+  const { addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz } = useAppData();
   const cameraRef = useRef<CameraView>(null);
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -32,6 +35,8 @@ export default function CameraScreen() {
   const [overlayText, setOverlayText] = useState('');
   const [textSize, setTextSize] = useState<'S' | 'M' | 'L'>('M');
   const [textColor, setTextColor] = useState('#FFFFFF');
+  const [postState, setPostState] = useState<PostState>('idle');
+  const [postError, setPostError] = useState<string>('');
 
   const handleCapture = useCallback(async () => {
     if (!cameraRef.current) return;
@@ -62,8 +67,24 @@ export default function CameraScreen() {
     setOverlayText('');
   }, []);
 
-  const handlePost = useCallback(() => {
-    if (!capturedImage) return;
+  const handlePost = useCallback(async () => {
+    setPostState('posting');
+    setPostError('');
+
+    if (!capturedImage) {
+      console.error('[Camera] Missing image URI');
+      setPostState('error');
+      setPostError('Missing image URI');
+      return;
+    }
+
+    const activeGroupId = mode === 'blitz' ? activeGroupIdBlitz : activeGroupIdToday;
+    if (!activeGroupId) {
+      console.error('[Camera] Missing activeGroupId');
+      setPostState('error');
+      setPostError('Missing activeGroupId');
+      return;
+    }
 
     let textOverlay: TextOverlay | undefined;
     if (overlayText.trim()) {
@@ -76,15 +97,29 @@ export default function CameraScreen() {
       };
     }
 
-    console.log('[Camera] Posting photo, mode:', mode);
-    if (mode === 'blitz') {
-      addBlitzPhoto(capturedImage, textOverlay);
-    } else {
-      addTodayPhoto(capturedImage, textOverlay);
-    }
+    console.log('[Camera] Posting photo, mode:', mode, 'groupId:', activeGroupId);
+    
+    try {
+      if (mode === 'blitz') {
+        addBlitzPhoto(capturedImage, textOverlay);
+      } else {
+        addTodayPhoto(capturedImage, textOverlay);
+      }
 
-    router.back();
-  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, router]);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      console.log('[Camera] Post successful');
+      setPostState('success');
+      
+      setTimeout(() => {
+        router.back();
+      }, 100);
+    } catch (error) {
+      console.error('[Camera] Post failed:', error);
+      setPostState('error');
+      setPostError(`Post failed: ${error}`);
+    }
+  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz, router]);
 
   const handleClose = useCallback(() => {
     router.back();
@@ -194,22 +229,65 @@ export default function CameraScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={[styles.actionButtonsOverlay, { paddingBottom: insets.bottom }]}>
-                <TouchableOpacity style={styles.actionButton} onPress={handleRetake}>
-                  <RotateCcw size={24} color="white" />
-                  <Text style={styles.actionButtonText}>Retake</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => setShowTextEditor(true)}
-                >
-                  <Type size={24} color="white" />
-                  <Text style={styles.actionButtonText}>Add Text</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.postButton} onPress={handlePost}>
-                  <Text style={styles.postButtonText}>Post</Text>
-                </TouchableOpacity>
-              </View>
+              <>
+                {(postState !== 'idle' || postError) && (
+                  <View style={[styles.postBanner, { bottom: insets.bottom + 150 }]}>
+                    <View style={styles.postBannerContent}>
+                      {postState === 'posting' && (
+                        <>
+                          <ActivityIndicator size="small" color="#FFD93D" />
+                          <Text style={styles.postBannerText}>Posting...</Text>
+                        </>
+                      )}
+                      {postState === 'success' && (
+                        <>
+                          <Check size={16} color="#00FF00" />
+                          <Text style={[styles.postBannerText, { color: '#00FF00' }]}>Success!</Text>
+                        </>
+                      )}
+                      {postState === 'error' && (
+                        <>
+                          <AlertCircle size={16} color="#FF6B6B" />
+                          <Text style={[styles.postBannerText, { color: '#FF6B6B' }]}>{postError}</Text>
+                        </>
+                      )}
+                    </View>
+                    <View style={styles.postBannerInfo}>
+                      <Text style={styles.postBannerSmall}>Target: {mode === 'blitz' ? 'Blitz' : 'Today'}</Text>
+                      <Text style={styles.postBannerSmall}>Group: {mode === 'blitz' ? activeGroupIdBlitz : activeGroupIdToday}</Text>
+                    </View>
+                  </View>
+                )}
+                <View style={[styles.actionButtonsOverlay, { paddingBottom: insets.bottom }]}>
+                  <TouchableOpacity 
+                    style={styles.actionButton} 
+                    onPress={handleRetake}
+                    disabled={postState === 'posting'}
+                  >
+                    <RotateCcw size={24} color="white" />
+                    <Text style={styles.actionButtonText}>Retake</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => setShowTextEditor(true)}
+                    disabled={postState === 'posting'}
+                  >
+                    <Type size={24} color="white" />
+                    <Text style={styles.actionButtonText}>Add Text</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.postButton, postState === 'posting' && styles.postButtonDisabled]} 
+                    onPress={handlePost}
+                    disabled={postState === 'posting'}
+                  >
+                    {postState === 'posting' ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Text style={styles.postButtonText}>Post</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </>
             )}
           </>
         ) : (
@@ -411,6 +489,38 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  postButtonDisabled: {
+    opacity: 0.6,
+  },
+  postBanner: {
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 2,
+    borderColor: '#FFD93D',
+  },
+  postBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  postBannerText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  postBannerInfo: {
+    gap: 2,
+  },
+  postBannerSmall: {
+    color: '#888',
+    fontSize: 11,
+    fontFamily: 'monospace' as const,
   },
   textEditorOverlay: {
     position: 'absolute',
