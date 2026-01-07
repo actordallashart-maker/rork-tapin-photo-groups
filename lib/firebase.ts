@@ -11,11 +11,11 @@ const firebaseConfig = {
   storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET!,
   messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID!,
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID!,
-  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || undefined,
 };
 
 const missing = Object.entries(firebaseConfig)
-  .filter(([_, v]) => !v && _ !== "measurementId")
+  .filter(([k, v]) => !v && k !== "measurementId")
   .map(([k]) => k);
 
 if (missing.length) {
@@ -29,6 +29,8 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 export let analytics: ReturnType<typeof getAnalytics> | null = null;
-isSupported().then((ok) => {
-  if (ok) analytics = getAnalytics(app);
-});
+if (firebaseConfig.measurementId) {
+  isSupported().then((ok) => {
+    if (ok) analytics = getAnalytics(app);
+  });
+}
