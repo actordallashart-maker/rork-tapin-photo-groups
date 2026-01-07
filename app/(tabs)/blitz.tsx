@@ -22,6 +22,8 @@ export default function BlitzScreen() {
     endBlitzRound,
     activeUserId,
     hasPostedBlitz,
+    isHydrated,
+    lastUpdateSource,
   } = useAppData();
 
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
@@ -113,6 +115,21 @@ export default function BlitzScreen() {
         />
 
         <View style={styles.debugContainer}>
+          <Text style={styles.debugText}>
+            PHOTOS STORE: hydrated={isHydrated ? 'true' : 'false'}  count={blitzPhotosForRound.length}  lastUpdateSource={lastUpdateSource}
+          </Text>
+          <Text style={styles.debugText}>
+            BLITZ STATE: {isWaiting ? 'armed' : isLive ? 'active' : 'unknown'}
+          </Text>
+          <Text style={styles.debugText}>
+            roundId: {currentBlitzRound?.roundId || 'null'}
+          </Text>
+          <Text style={styles.debugText}>
+            roundStart: {isLive && currentBlitzRound?.endsAt ? new Date(currentBlitzRound.endsAt - 5 * 60 * 1000).toISOString() : 'null'}
+          </Text>
+          <Text style={styles.debugText}>
+            roundEnd: {isLive && currentBlitzRound?.endsAt ? new Date(currentBlitzRound.endsAt).toISOString() : 'null'}
+          </Text>
           <Text style={styles.debugText}>
             Photos source: optimistic | Photo IDs: {blitzPhotosForRound.slice(0, 3).map(p => p.photoId.slice(0, 8)).join(', ')}
           </Text>

@@ -24,6 +24,8 @@ export default function TodayScreen() {
     hasPostedToday,
     todayCycleStart,
     todayCycleEnd,
+    isHydrated,
+    lastUpdateSource,
   } = useAppData();
 
   const [blitzSecondsRemaining, setBlitzSecondsRemaining] = useState<number | null>(null);
@@ -97,6 +99,9 @@ export default function TodayScreen() {
         />
 
         <View style={styles.debugContainer}>
+          <Text style={styles.debugText}>
+            PHOTOS STORE: hydrated={isHydrated ? 'true' : 'false'}  count={todayPhotosForGroup.length}  lastUpdateSource={lastUpdateSource}
+          </Text>
           <Text style={styles.debugText}>
             Photos source: optimistic | Photo IDs: {todayPhotosForGroup.slice(0, 3).map(p => p.photoId.slice(0, 8)).join(', ')}
           </Text>

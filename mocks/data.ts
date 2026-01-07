@@ -90,13 +90,11 @@ export const createMockTodayPhotos = (): TodayPhoto[] => {
 };
 
 export const createMockBlitzRounds = (): BlitzRound[] => {
-  const now = Date.now();
   return [
     {
       roundId: 'blitz-round-a-1',
       groupId: 'group-a',
-      status: 'live',
-      endsAt: now + 5 * 60 * 1000,
+      status: 'waiting',
       prompt: getRandomPrompt(),
     },
     {
@@ -115,31 +113,7 @@ export const createMockBlitzRounds = (): BlitzRound[] => {
 };
 
 export const createMockBlitzPhotos = (): BlitzPhoto[] => {
-  const now = new Date().toISOString();
-  return [
-    {
-      photoId: 'blitz-photo-1',
-      groupId: 'group-a',
-      userId: 'u1',
-      roundId: 'blitz-round-a-1',
-      createdAt: now,
-      imageUri: 'https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=400&h=400&fit=crop',
-      x: 30,
-      y: 40,
-      zIndex: 1,
-    },
-    {
-      photoId: 'blitz-photo-2',
-      groupId: 'group-a',
-      userId: 'u3',
-      roundId: 'blitz-round-a-1',
-      createdAt: now,
-      imageUri: 'https://images.unsplash.com/photo-1682695797221-8164ff1fafc9?w=400&h=400&fit=crop',
-      x: 150,
-      y: 100,
-      zIndex: 2,
-    },
-  ];
+  return [];
 };
 
 export const createInitialMockData = (): AppData => ({

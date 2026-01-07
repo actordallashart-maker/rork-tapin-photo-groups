@@ -11,12 +11,15 @@ import {
 } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
 import Colors from '@/constants/colors';
+import { useRouter } from 'expo-router';
 
 export default function AdminScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const {
     seedMockData,
     clearAllData,
+    resetToFirstLaunch,
     endBlitzRound,
     activeGroupIdToday,
     activeGroupIdBlitz,
@@ -48,6 +51,17 @@ export default function AdminScreen() {
     await clearAllData();
     showAlert('Success', 'All data cleared');
   }, [clearAllData, showAlert]);
+
+  const handleResetData = useCallback(async () => {
+    console.log('[Admin] Resetting to first launch...');
+    await resetToFirstLaunch();
+    if (Platform.OS === 'web') {
+      alert('Reset complete. App state restored to first launch.');
+    } else {
+      Alert.alert('Reset Complete', 'App state restored to first launch. New user ID generated.');
+    }
+    router.replace('/(tabs)');
+  }, [resetToFirstLaunch, router]);
 
   const handleEndBlitzRound = useCallback(() => {
     if (!currentBlitzRound || currentBlitzRound.status !== 'live') {
@@ -143,6 +157,18 @@ export default function AdminScreen() {
             <View style={styles.buttonContent}>
               <Text style={styles.buttonTitle}>Clear All Data</Text>
               <Text style={styles.buttonSubtitle}>Remove all stored data</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.resetButton]}
+            onPress={handleResetData}
+            activeOpacity={0.7}
+          >
+            <RefreshCw size={20} color="#FF4444" />
+            <View style={styles.buttonContent}>
+              <Text style={styles.buttonTitle}>Reset Data (First Launch)</Text>
+              <Text style={styles.buttonSubtitle}>Clear ALL app data + regenerate user ID</Text>
             </View>
           </TouchableOpacity>
 
@@ -309,5 +335,9 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     fontSize: 12,
     flex: 1,
+  },
+  resetButton: {
+    borderWidth: 2,
+    borderColor: '#FF4444',
   },
 });

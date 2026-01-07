@@ -6,8 +6,14 @@ import { Group, TodayPhoto, BlitzRound, BlitzPhoto, AppData, TextOverlay } from 
 import { createInitialMockData } from '@/mocks/data';
 import { getRandomPrompt } from '@/constants/blitz-prompts';
 
-const STORAGE_KEY = 'tapin_app_data';
-const MOCK_ACTIVE_USER_ID = 'u1';
+const STORAGE_KEY_MAIN = 'tapin_app_data';
+const STORAGE_KEY_TODAY = 'tapin_photos_today_v1';
+const STORAGE_KEY_BLITZ = 'tapin_photos_blitz_v1';
+const STORAGE_KEY_ROUNDS = 'tapin_blitz_round_state_v1';
+const STORAGE_KEY_USER_ID = 'tapin_active_user_id';
+const STORAGE_KEY_TODAY_CYCLE = 'tapin_today_cycle_state_v1';
+
+const generateUserId = () => `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
 const getTodayDateKey = (): string => {
   const now = new Date();
@@ -47,19 +53,54 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [activeGroupIdToday, setActiveGroupIdToday] = useState<string>('group-a');
   const [activeGroupIdBlitz, setActiveGroupIdBlitz] = useState<string>('group-a');
+  const [activeUserId, setActiveUserId] = useState<string>('');
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [lastUpdateSource, setLastUpdateSource] = useState<'optimistic' | 'merge' | 'hydrate' | 'remote'>('hydrate');
 
   const dataQuery = useQuery({
     queryKey: ['appData'],
     queryFn: async (): Promise<AppData> => {
       console.log('[AppData] Loading from AsyncStorage...');
-      const stored = await AsyncStorage.getItem(STORAGE_KEY);
+      
+      let userId = await AsyncStorage.getItem(STORAGE_KEY_USER_ID);
+      if (!userId) {
+        userId = generateUserId();
+        await AsyncStorage.setItem(STORAGE_KEY_USER_ID, userId);
+        console.log('[AppData] Generated new user ID:', userId);
+      }
+      setActiveUserId(userId);
+      
+      const stored = await AsyncStorage.getItem(STORAGE_KEY_MAIN);
       if (stored) {
         console.log('[AppData] Found stored data');
-        return JSON.parse(stored);
+        const data = JSON.parse(stored);
+        
+        const todayStored = await AsyncStorage.getItem(STORAGE_KEY_TODAY);
+        const blitzStored = await AsyncStorage.getItem(STORAGE_KEY_BLITZ);
+        const roundsStored = await AsyncStorage.getItem(STORAGE_KEY_ROUNDS);
+        
+        if (todayStored) {
+          data.todayPhotos = JSON.parse(todayStored);
+        }
+        if (blitzStored) {
+          data.blitzPhotos = JSON.parse(blitzStored);
+        }
+        if (roundsStored) {
+          data.blitzRounds = JSON.parse(roundsStored);
+        }
+        
+        setIsHydrated(true);
+        setLastUpdateSource('hydrate');
+        return data;
       }
       console.log('[AppData] No stored data, using initial mock');
       const initial = createInitialMockData();
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+      await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(initial));
+      await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify(initial.todayPhotos));
+      await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify(initial.blitzPhotos));
+      await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify(initial.blitzRounds));
+      setIsHydrated(true);
+      setLastUpdateSource('hydrate');
       return initial;
     },
   });
@@ -67,7 +108,10 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
   const { mutate: saveMutate } = useMutation({
     mutationFn: async (data: AppData) => {
       console.log('[AppData] Saving to AsyncStorage...');
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(data));
+      await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify(data.todayPhotos));
+      await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify(data.blitzPhotos));
+      await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify(data.blitzRounds));
       return data;
     },
     onSuccess: (data) => {
@@ -132,12 +176,12 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
       }
       const now = new Date();
       const createdAt = now.toISOString();
-      const photoId = generateStableId(activeGroupIdToday, 'today', MOCK_ACTIVE_USER_ID);
+      const photoId = generateStableId(activeGroupIdToday, 'today', activeUserId);
       
       const newPhoto: TodayPhoto = {
         photoId,
         groupId: activeGroupIdToday,
-        userId: MOCK_ACTIVE_USER_ID,
+        userId: activeUserId,
         dateKey: todayDateKey,
         createdAt,
         imageUri,
@@ -146,20 +190,21 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
         zIndex: todayPhotosForGroup.length + 1,
         textOverlay,
       };
-      console.log('[AppData] Adding today photo:', newPhoto.photoId, { userId: MOCK_ACTIVE_USER_ID, groupId: activeGroupIdToday });
+      console.log('[AppData] Adding today photo:', newPhoto.photoId, { userId: activeUserId, groupId: activeGroupIdToday });
       
       const mergedPhotos = mergePhotosById(data.todayPhotos, [newPhoto]);
       const sortedPhotos = mergedPhotos.sort((a, b) => 
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
       
+      setLastUpdateSource('optimistic');
       const updatedData = {
         ...data,
         todayPhotos: sortedPhotos,
       };
       saveMutate(updatedData);
     },
-    [data, activeGroupIdToday, todayDateKey, todayPhotosForGroup.length, saveMutate]
+    [data, activeGroupIdToday, activeUserId, todayDateKey, todayPhotosForGroup.length, saveMutate]
   );
 
   const updateTodayPhotoPosition = useCallback(
@@ -174,25 +219,43 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     [data, saveMutate]
   );
 
+  const ensureBlitzRoundStarted = useCallback(
+    (groupId: string) => {
+      if (!data) return null;
+      
+      let round = data.blitzRounds.find((r) => r.groupId === groupId);
+      if (!round) {
+        console.error('[AppData] No round found for group:', groupId);
+        return null;
+      }
+
+      if (round.status === 'waiting') {
+        console.log('[AppData] Starting blitz round on first post:', round.roundId);
+        const now = Date.now();
+        const updatedRounds = data.blitzRounds.map((r) =>
+          r.roundId === round!.roundId
+            ? { ...r, status: 'live' as const, endsAt: now + 5 * 60 * 1000 }
+            : r
+        );
+        return updatedRounds;
+      }
+      
+      return data.blitzRounds;
+    },
+    [data]
+  );
+
   const addBlitzPhoto = useCallback(
     (imageUri: string, textOverlay?: TextOverlay) => {
       if (!data) {
         console.error('[AppData] Cannot add photo: no data');
         return;
       }
-      let round = blitzRounds.find((r) => r.groupId === activeGroupIdBlitz);
-      let updatedRounds = [...data.blitzRounds];
-
-      if (round && round.status === 'waiting') {
-        console.log('[AppData] Starting blitz round:', round.roundId);
-        updatedRounds = updatedRounds.map((r) =>
-          r.roundId === round!.roundId
-            ? { ...r, status: 'live' as const, endsAt: Date.now() + 5 * 60 * 1000 }
-            : r
-        );
-        round = updatedRounds.find((r) => r.roundId === round!.roundId);
-      }
-
+      
+      const updatedRounds = ensureBlitzRoundStarted(activeGroupIdBlitz);
+      if (!updatedRounds) return;
+      
+      const round = updatedRounds.find((r) => r.groupId === activeGroupIdBlitz);
       if (!round) {
         console.error('[AppData] No round found for group:', activeGroupIdBlitz);
         return;
@@ -200,12 +263,12 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
 
       const now = new Date();
       const createdAt = now.toISOString();
-      const photoId = generateStableId(activeGroupIdBlitz, 'blitz', MOCK_ACTIVE_USER_ID);
+      const photoId = generateStableId(activeGroupIdBlitz, 'blitz', activeUserId);
 
       const newPhoto: BlitzPhoto = {
         photoId,
         groupId: activeGroupIdBlitz,
-        userId: MOCK_ACTIVE_USER_ID,
+        userId: activeUserId,
         roundId: round.roundId,
         createdAt,
         imageUri,
@@ -214,13 +277,14 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
         zIndex: blitzPhotosForRound.length + 1,
         textOverlay,
       };
-      console.log('[AppData] Adding blitz photo:', newPhoto.photoId, { userId: MOCK_ACTIVE_USER_ID, groupId: activeGroupIdBlitz, roundId: round.roundId });
+      console.log('[AppData] Adding blitz photo:', newPhoto.photoId, { userId: activeUserId, groupId: activeGroupIdBlitz, roundId: round.roundId });
       
       const mergedPhotos = mergePhotosById(data.blitzPhotos, [newPhoto]);
       const sortedPhotos = mergedPhotos.sort((a, b) => 
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
       );
       
+      setLastUpdateSource('optimistic');
       const updatedData = {
         ...data,
         blitzRounds: updatedRounds,
@@ -228,7 +292,7 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
       };
       saveMutate(updatedData);
     },
-    [data, activeGroupIdBlitz, blitzRounds, blitzPhotosForRound.length, saveMutate]
+    [data, activeGroupIdBlitz, activeUserId, blitzPhotosForRound.length, saveMutate, ensureBlitzRoundStarted]
   );
 
   const updateBlitzPhotoPosition = useCallback(
@@ -274,14 +338,47 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
   const seedMockData = useCallback(async () => {
     console.log('[AppData] Seeding mock data...');
     const initial = createInitialMockData();
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(initial));
+    await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(initial));
+    await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify(initial.todayPhotos));
+    await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify(initial.blitzPhotos));
+    await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify(initial.blitzRounds));
     queryClient.invalidateQueries({ queryKey: ['appData'] });
   }, [queryClient]);
 
   const clearAllData = useCallback(async () => {
     console.log('[AppData] Clearing all data...');
-    await AsyncStorage.removeItem(STORAGE_KEY);
+    await AsyncStorage.removeItem(STORAGE_KEY_MAIN);
     queryClient.invalidateQueries({ queryKey: ['appData'] });
+  }, [queryClient]);
+
+  const resetToFirstLaunch = useCallback(async () => {
+    console.log('[AppData] Resetting to first launch state...');
+    await AsyncStorage.multiRemove([
+      STORAGE_KEY_MAIN,
+      STORAGE_KEY_TODAY,
+      STORAGE_KEY_BLITZ,
+      STORAGE_KEY_ROUNDS,
+      STORAGE_KEY_USER_ID,
+      STORAGE_KEY_TODAY_CYCLE,
+    ]);
+    
+    const newUserId = generateUserId();
+    await AsyncStorage.setItem(STORAGE_KEY_USER_ID, newUserId);
+    setActiveUserId(newUserId);
+    console.log('[AppData] Generated new user ID after reset:', newUserId);
+    
+    const initial = createInitialMockData();
+    await AsyncStorage.setItem(STORAGE_KEY_MAIN, JSON.stringify(initial));
+    await AsyncStorage.setItem(STORAGE_KEY_TODAY, JSON.stringify(initial.todayPhotos));
+    await AsyncStorage.setItem(STORAGE_KEY_BLITZ, JSON.stringify(initial.blitzPhotos));
+    await AsyncStorage.setItem(STORAGE_KEY_ROUNDS, JSON.stringify(initial.blitzRounds));
+    
+    setIsHydrated(false);
+    queryClient.invalidateQueries({ queryKey: ['appData'] });
+    
+    setTimeout(() => {
+      setIsHydrated(true);
+    }, 100);
   }, [queryClient]);
 
   const addGroup = useCallback(
@@ -388,27 +485,28 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
   );
 
   const hasPostedToday = useMemo(() => {
+    if (!activeUserId) return false;
     const cycleStart = getTodayCycleStart();
     const cycleEnd = getTodayCycleEnd();
     return todayPhotos.some(
       (p) =>
-        p.userId === MOCK_ACTIVE_USER_ID &&
+        p.userId === activeUserId &&
         p.groupId === activeGroupIdToday &&
         p.dateKey === todayDateKey &&
         p.createdAt >= cycleStart &&
         p.createdAt <= cycleEnd
     );
-  }, [todayPhotos, activeGroupIdToday, todayDateKey]);
+  }, [todayPhotos, activeGroupIdToday, todayDateKey, activeUserId]);
 
   const hasPostedBlitz = useMemo(() => {
-    if (!currentBlitzRound) return false;
+    if (!activeUserId || !currentBlitzRound) return false;
     return blitzPhotos.some(
       (p) =>
-        p.userId === MOCK_ACTIVE_USER_ID &&
+        p.userId === activeUserId &&
         p.groupId === activeGroupIdBlitz &&
         p.roundId === currentBlitzRound.roundId
     );
-  }, [blitzPhotos, activeGroupIdBlitz, currentBlitzRound]);
+  }, [blitzPhotos, activeGroupIdBlitz, currentBlitzRound, activeUserId]);
 
   return {
     isLoading: dataQuery.isLoading,
@@ -430,6 +528,7 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     endBlitzRound,
     seedMockData,
     clearAllData,
+    resetToFirstLaunch,
     addGroup,
     addMemberToGroup,
     removeMemberFromGroup,
@@ -439,10 +538,12 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     allDateKeys,
     getPhotosForDate,
     todayDateKey,
-    activeUserId: MOCK_ACTIVE_USER_ID,
+    activeUserId,
     hasPostedToday,
     hasPostedBlitz,
     todayCycleStart: getTodayCycleStart(),
     todayCycleEnd: getTodayCycleEnd(),
+    isHydrated,
+    lastUpdateSource,
   };
 });
