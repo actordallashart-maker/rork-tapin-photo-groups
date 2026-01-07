@@ -7,6 +7,7 @@ import { createInitialMockData } from '@/mocks/data';
 import { getRandomPrompt } from '@/constants/blitz-prompts';
 
 const STORAGE_KEY = 'tapin_app_data';
+const MOCK_ACTIVE_USER_ID = 'u1';
 
 const getTodayDateKey = (): string => {
   const now = new Date();
@@ -14,6 +15,33 @@ const getTodayDateKey = (): string => {
 };
 
 const generateId = () => Math.random().toString(36).substring(2, 15);
+
+const generateStableId = (groupId: string, tab: string, userId: string): string => {
+  const timestamp = Date.now();
+  return `${groupId}_${tab}_${userId}_${timestamp}`;
+};
+
+const mergePhotosById = <T extends { photoId: string }>(existing: T[], incoming: T[]): T[] => {
+  if (incoming.length === 0 && existing.length > 0) {
+    return existing;
+  }
+  const merged = new Map<string, T>();
+  existing.forEach((photo) => merged.set(photo.photoId, photo));
+  incoming.forEach((photo) => merged.set(photo.photoId, photo));
+  return Array.from(merged.values());
+};
+
+const getTodayCycleStart = (): string => {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now.toISOString();
+};
+
+const getTodayCycleEnd = (): string => {
+  const now = new Date();
+  now.setHours(23, 59, 59, 999);
+  return now.toISOString();
+};
 
 export const [AppDataProvider, useAppData] = createContextHook(() => {
   const queryClient = useQueryClient();
@@ -98,21 +126,36 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
 
   const addTodayPhoto = useCallback(
     (imageUri: string, textOverlay?: TextOverlay) => {
-      if (!data) return;
+      if (!data) {
+        console.error('[AppData] Cannot add photo: no data');
+        return;
+      }
+      const now = new Date();
+      const createdAt = now.toISOString();
+      const photoId = generateStableId(activeGroupIdToday, 'today', MOCK_ACTIVE_USER_ID);
+      
       const newPhoto: TodayPhoto = {
-        photoId: generateId(),
+        photoId,
         groupId: activeGroupIdToday,
+        userId: MOCK_ACTIVE_USER_ID,
         dateKey: todayDateKey,
+        createdAt,
         imageUri,
         x: Math.random() * 100 + 20,
         y: Math.random() * 100 + 20,
         zIndex: todayPhotosForGroup.length + 1,
         textOverlay,
       };
-      console.log('[AppData] Adding today photo:', newPhoto.photoId);
+      console.log('[AppData] Adding today photo:', newPhoto.photoId, { userId: MOCK_ACTIVE_USER_ID, groupId: activeGroupIdToday });
+      
+      const mergedPhotos = mergePhotosById(data.todayPhotos, [newPhoto]);
+      const sortedPhotos = mergedPhotos.sort((a, b) => 
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      
       const updatedData = {
         ...data,
-        todayPhotos: [...data.todayPhotos, newPhoto],
+        todayPhotos: sortedPhotos,
       };
       saveMutate(updatedData);
     },
@@ -133,7 +176,10 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
 
   const addBlitzPhoto = useCallback(
     (imageUri: string, textOverlay?: TextOverlay) => {
-      if (!data) return;
+      if (!data) {
+        console.error('[AppData] Cannot add photo: no data');
+        return;
+      }
       let round = blitzRounds.find((r) => r.groupId === activeGroupIdBlitz);
       let updatedRounds = [...data.blitzRounds];
 
@@ -147,23 +193,38 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
         round = updatedRounds.find((r) => r.roundId === round!.roundId);
       }
 
-      if (!round) return;
+      if (!round) {
+        console.error('[AppData] No round found for group:', activeGroupIdBlitz);
+        return;
+      }
+
+      const now = new Date();
+      const createdAt = now.toISOString();
+      const photoId = generateStableId(activeGroupIdBlitz, 'blitz', MOCK_ACTIVE_USER_ID);
 
       const newPhoto: BlitzPhoto = {
-        photoId: generateId(),
+        photoId,
         groupId: activeGroupIdBlitz,
+        userId: MOCK_ACTIVE_USER_ID,
         roundId: round.roundId,
+        createdAt,
         imageUri,
         x: Math.random() * 100 + 20,
         y: Math.random() * 100 + 20,
         zIndex: blitzPhotosForRound.length + 1,
         textOverlay,
       };
-      console.log('[AppData] Adding blitz photo:', newPhoto.photoId);
+      console.log('[AppData] Adding blitz photo:', newPhoto.photoId, { userId: MOCK_ACTIVE_USER_ID, groupId: activeGroupIdBlitz, roundId: round.roundId });
+      
+      const mergedPhotos = mergePhotosById(data.blitzPhotos, [newPhoto]);
+      const sortedPhotos = mergedPhotos.sort((a, b) => 
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      
       const updatedData = {
         ...data,
         blitzRounds: updatedRounds,
-        blitzPhotos: [...data.blitzPhotos, newPhoto],
+        blitzPhotos: sortedPhotos,
       };
       saveMutate(updatedData);
     },
@@ -326,6 +387,29 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     [todayPhotos]
   );
 
+  const hasPostedToday = useMemo(() => {
+    const cycleStart = getTodayCycleStart();
+    const cycleEnd = getTodayCycleEnd();
+    return todayPhotos.some(
+      (p) =>
+        p.userId === MOCK_ACTIVE_USER_ID &&
+        p.groupId === activeGroupIdToday &&
+        p.dateKey === todayDateKey &&
+        p.createdAt >= cycleStart &&
+        p.createdAt <= cycleEnd
+    );
+  }, [todayPhotos, activeGroupIdToday, todayDateKey]);
+
+  const hasPostedBlitz = useMemo(() => {
+    if (!currentBlitzRound) return false;
+    return blitzPhotos.some(
+      (p) =>
+        p.userId === MOCK_ACTIVE_USER_ID &&
+        p.groupId === activeGroupIdBlitz &&
+        p.roundId === currentBlitzRound.roundId
+    );
+  }, [blitzPhotos, activeGroupIdBlitz, currentBlitzRound]);
+
   return {
     isLoading: dataQuery.isLoading,
     groups,
@@ -355,5 +439,10 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     allDateKeys,
     getPhotosForDate,
     todayDateKey,
+    activeUserId: MOCK_ACTIVE_USER_ID,
+    hasPostedToday,
+    hasPostedBlitz,
+    todayCycleStart: getTodayCycleStart(),
+    todayCycleEnd: getTodayCycleEnd(),
   };
 });

@@ -23,8 +23,10 @@ export interface TextOverlay {
 export interface TodayPhoto {
   photoId: string;
   groupId: string;
+  userId: string;
   dateKey: string;
   imageUri: string;
+  createdAt: string;
   x: number;
   y: number;
   zIndex: number;
@@ -45,8 +47,10 @@ export interface BlitzRound {
 export interface BlitzPhoto {
   photoId: string;
   groupId: string;
+  userId: string;
   roundId: string;
   imageUri: string;
+  createdAt: string;
   x: number;
   y: number;
   zIndex: number;

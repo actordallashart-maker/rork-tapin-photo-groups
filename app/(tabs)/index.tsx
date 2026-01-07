@@ -20,6 +20,10 @@ export default function TodayScreen() {
     updateTodayPhotoPosition,
     getBlitzRoundForGroup,
     setActiveGroupIdBlitz,
+    activeUserId,
+    hasPostedToday,
+    todayCycleStart,
+    todayCycleEnd,
   } = useAppData();
 
   const [blitzSecondsRemaining, setBlitzSecondsRemaining] = useState<number | null>(null);
@@ -61,27 +65,15 @@ export default function TodayScreen() {
     router.push('/camera?mode=today');
   }, [router]);
 
-  const getTodayStartTime = () => {
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    return now.toISOString();
-  };
-
-  const getTodayEndTime = () => {
-    const now = new Date();
-    now.setHours(23, 59, 59, 999);
-    return now.toISOString();
-  };
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <DebugHud
         tabName="Today"
-        activeUserId="N/A"
+        activeUserId={activeUserId}
         activeGroupId={activeGroupIdToday}
-        hasPosted={false}
-        cycleStart={getTodayStartTime()}
-        cycleEnd={getTodayEndTime()}
+        hasPosted={hasPostedToday}
+        cycleStart={todayCycleStart}
+        cycleEnd={todayCycleEnd}
         photosCount={todayPhotosForGroup.length}
       />
       <ScrollView 
@@ -105,6 +97,9 @@ export default function TodayScreen() {
         />
 
         <View style={styles.debugContainer}>
+          <Text style={styles.debugText}>
+            Photos source: optimistic | Photo IDs: {todayPhotosForGroup.slice(0, 3).map(p => p.photoId.slice(0, 8)).join(', ')}
+          </Text>
           <Text style={styles.debugText}>
             todayActiveGroupId: {activeGroupIdToday} | photos: {todayPhotosForGroup.length}
           </Text>
@@ -130,12 +125,18 @@ export default function TodayScreen() {
         </View>
 
         <TouchableOpacity 
-          style={styles.tapInButton} 
+          style={[
+            styles.tapInButton,
+            hasPostedToday && styles.tapInButtonDisabled
+          ]} 
           onPress={handleTapIn}
           activeOpacity={0.8}
+          disabled={hasPostedToday}
         >
           <View style={styles.tapInButtonInner}>
-            <Text style={styles.tapInButtonText}>Tap In</Text>
+            <Text style={styles.tapInButtonText}>
+              {hasPostedToday ? "You've posted today" : 'Tap In'}
+            </Text>
           </View>
         </TouchableOpacity>
       </ScrollView>
@@ -205,6 +206,10 @@ const styles = StyleSheet.create({
     color: Colors.dark.blitzYellow,
     fontSize: 24,
     fontWeight: '700' as const,
+    textAlign: 'center' as const,
+  },
+  tapInButtonDisabled: {
+    opacity: 0.5,
   },
   debugContainer: {
     paddingVertical: 8,

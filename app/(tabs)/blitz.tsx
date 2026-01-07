@@ -20,6 +20,8 @@ export default function BlitzScreen() {
     currentBlitzRound,
     updateBlitzPhotoPosition,
     endBlitzRound,
+    activeUserId,
+    hasPostedBlitz,
   } = useAppData();
 
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
@@ -75,9 +77,9 @@ export default function BlitzScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <DebugHud
         tabName="Blitz"
-        activeUserId="N/A"
+        activeUserId={activeUserId}
         activeGroupId={activeGroupIdBlitz}
-        hasPosted={false}
+        hasPosted={hasPostedBlitz}
         roundStart={getRoundStartTime()}
         roundEnd={getRoundEndTime()}
         photosCount={blitzPhotosForRound.length}
@@ -111,6 +113,9 @@ export default function BlitzScreen() {
         />
 
         <View style={styles.debugContainer}>
+          <Text style={styles.debugText}>
+            Photos source: optimistic | Photo IDs: {blitzPhotosForRound.slice(0, 3).map(p => p.photoId.slice(0, 8)).join(', ')}
+          </Text>
           <Text style={styles.debugText}>
             blitzActiveGroupId: {activeGroupIdBlitz} | round: {currentBlitzRound?.roundId || 'none'} | photos: {blitzPhotosForRound.length}
           </Text>

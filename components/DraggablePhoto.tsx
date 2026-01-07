@@ -203,20 +203,20 @@ export default function DraggablePhoto({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 16,
+    width: 140,
+    height: 140,
+    borderRadius: 14,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowRadius: 6,
+    elevation: 6,
   },
   image: {
     width: '100%',
     height: '100%',
-    borderRadius: 16,
+    borderRadius: 14,
   },
   textOverlayContainer: {
     position: 'absolute',

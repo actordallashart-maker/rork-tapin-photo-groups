@@ -25,7 +25,15 @@ export default function CameraScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams<{ mode: 'today' | 'blitz' }>();
-  const { addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz } = useAppData();
+  const { 
+    addTodayPhoto, 
+    addBlitzPhoto, 
+    activeGroupIdToday, 
+    activeGroupIdBlitz,
+    activeUserId,
+    hasPostedToday,
+    hasPostedBlitz,
+  } = useAppData();
   const cameraRef = useRef<CameraView>(null);
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -86,6 +94,21 @@ export default function CameraScreen() {
       return;
     }
 
+    if (!activeUserId) {
+      console.error('[Camera] Missing activeUserId');
+      setPostState('error');
+      setPostError('Missing activeUserId');
+      return;
+    }
+
+    const hasAlreadyPosted = mode === 'blitz' ? hasPostedBlitz : hasPostedToday;
+    if (hasAlreadyPosted) {
+      console.error('[Camera] User has already posted');
+      setPostState('error');
+      setPostError("You've already posted this round");
+      return;
+    }
+
     let textOverlay: TextOverlay | undefined;
     if (overlayText.trim()) {
       textOverlay = {
@@ -119,7 +142,7 @@ export default function CameraScreen() {
       setPostState('error');
       setPostError(`Post failed: ${error}`);
     }
-  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz, router]);
+  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz, activeUserId, hasPostedToday, hasPostedBlitz, router]);
 
   const handleClose = useCallback(() => {
     router.back();
@@ -276,14 +299,19 @@ export default function CameraScreen() {
                     <Text style={styles.actionButtonText}>Add Text</Text>
                   </TouchableOpacity>
                   <TouchableOpacity 
-                    style={[styles.postButton, postState === 'posting' && styles.postButtonDisabled]} 
+                    style={[
+                      styles.postButton, 
+                      (postState === 'posting' || (mode === 'blitz' ? hasPostedBlitz : hasPostedToday)) && styles.postButtonDisabled
+                    ]} 
                     onPress={handlePost}
-                    disabled={postState === 'posting'}
+                    disabled={postState === 'posting' || (mode === 'blitz' ? hasPostedBlitz : hasPostedToday)}
                   >
                     {postState === 'posting' ? (
                       <ActivityIndicator size="small" color="white" />
                     ) : (
-                      <Text style={styles.postButtonText}>Post</Text>
+                      <Text style={styles.postButtonText}>
+                        {(mode === 'blitz' ? hasPostedBlitz : hasPostedToday) ? 'Posted this round' : 'Ready to post'}
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </View>

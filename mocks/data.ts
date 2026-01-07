@@ -44,11 +44,14 @@ export const mockGroups: Group[] = [
 
 export const createMockTodayPhotos = (): TodayPhoto[] => {
   const dateKey = getTodayDateKey();
+  const now = new Date().toISOString();
   return [
     {
       photoId: 'today-1',
       groupId: 'group-a',
+      userId: 'u1',
       dateKey,
+      createdAt: now,
       imageUri: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=400&fit=crop',
       x: 20,
       y: 30,
@@ -57,7 +60,9 @@ export const createMockTodayPhotos = (): TodayPhoto[] => {
     {
       photoId: 'today-2',
       groupId: 'group-a',
+      userId: 'u2',
       dateKey,
+      createdAt: now,
       imageUri: 'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=400&h=400&fit=crop',
       x: 140,
       y: 120,
@@ -73,7 +78,9 @@ export const createMockTodayPhotos = (): TodayPhoto[] => {
     {
       photoId: 'today-3',
       groupId: 'group-c',
+      userId: 'u8',
       dateKey,
+      createdAt: now,
       imageUri: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?w=400&h=400&fit=crop',
       x: 60,
       y: 60,
@@ -108,11 +115,14 @@ export const createMockBlitzRounds = (): BlitzRound[] => {
 };
 
 export const createMockBlitzPhotos = (): BlitzPhoto[] => {
+  const now = new Date().toISOString();
   return [
     {
       photoId: 'blitz-photo-1',
       groupId: 'group-a',
+      userId: 'u1',
       roundId: 'blitz-round-a-1',
+      createdAt: now,
       imageUri: 'https://images.unsplash.com/photo-1682687220742-aba13b6e50ba?w=400&h=400&fit=crop',
       x: 30,
       y: 40,
@@ -121,7 +131,9 @@ export const createMockBlitzPhotos = (): BlitzPhoto[] => {
     {
       photoId: 'blitz-photo-2',
       groupId: 'group-a',
+      userId: 'u3',
       roundId: 'blitz-round-a-1',
+      createdAt: now,
       imageUri: 'https://images.unsplash.com/photo-1682695797221-8164ff1fafc9?w=400&h=400&fit=crop',
       x: 150,
       y: 100,
