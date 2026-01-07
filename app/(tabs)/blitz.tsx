@@ -6,6 +6,7 @@ import { Zap } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
 import GroupSwitcher from '@/components/GroupSwitcher';
 import PhotoContainer from '@/components/PhotoContainer';
+import DebugHud from '@/components/DebugHud';
 import Colors from '@/constants/colors';
 
 export default function BlitzScreen() {
@@ -59,8 +60,28 @@ export default function BlitzScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getRoundStartTime = () => {
+    if (!isLive || !currentBlitzRound?.endsAt) return 'N/A';
+    const startTime = new Date(currentBlitzRound.endsAt - 5 * 60 * 1000);
+    return startTime.toISOString();
+  };
+
+  const getRoundEndTime = () => {
+    if (!isLive || !currentBlitzRound?.endsAt) return 'N/A';
+    return new Date(currentBlitzRound.endsAt).toISOString();
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <DebugHud
+        tabName="Blitz"
+        activeUserId="N/A"
+        activeGroupId={activeGroupIdBlitz}
+        hasPosted={false}
+        roundStart={getRoundStartTime()}
+        roundEnd={getRoundEndTime()}
+        photosCount={blitzPhotosForRound.length}
+      />
       <ScrollView 
         style={styles.scrollView} 
         contentContainerStyle={styles.scrollContent}

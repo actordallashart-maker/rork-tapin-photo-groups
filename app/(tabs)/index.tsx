@@ -6,6 +6,7 @@ import { useAppData } from '@/providers/AppDataProvider';
 import GroupSwitcher from '@/components/GroupSwitcher';
 import PhotoContainer from '@/components/PhotoContainer';
 import BlitzLivePill from '@/components/BlitzLivePill';
+import DebugHud from '@/components/DebugHud';
 import Colors from '@/constants/colors';
 
 export default function TodayScreen() {
@@ -60,8 +61,29 @@ export default function TodayScreen() {
     router.push('/camera?mode=today');
   }, [router]);
 
+  const getTodayStartTime = () => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return now.toISOString();
+  };
+
+  const getTodayEndTime = () => {
+    const now = new Date();
+    now.setHours(23, 59, 59, 999);
+    return now.toISOString();
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      <DebugHud
+        tabName="Today"
+        activeUserId="N/A"
+        activeGroupId={activeGroupIdToday}
+        hasPosted={false}
+        cycleStart={getTodayStartTime()}
+        cycleEnd={getTodayEndTime()}
+        photosCount={todayPhotosForGroup.length}
+      />
       <ScrollView 
         style={styles.scrollView} 
         contentContainerStyle={styles.scrollContent}
