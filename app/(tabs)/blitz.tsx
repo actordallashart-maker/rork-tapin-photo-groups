@@ -6,7 +6,7 @@ import { Zap } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
 import GroupSwitcher from '@/components/GroupSwitcher';
 import PhotoContainer from '@/components/PhotoContainer';
-import DebugHud from '@/components/DebugHud';
+
 import Colors from '@/constants/colors';
 
 export default function BlitzScreen() {
@@ -20,10 +20,7 @@ export default function BlitzScreen() {
     currentBlitzRound,
     updateBlitzPhotoPosition,
     endBlitzRound,
-    activeUserId,
-    hasPostedBlitz,
-    isHydrated,
-    lastUpdateSource,
+
   } = useAppData();
 
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
@@ -64,28 +61,9 @@ export default function BlitzScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const getRoundStartTime = () => {
-    if (!isLive || !currentBlitzRound?.endsAt) return 'N/A';
-    const startTime = new Date(currentBlitzRound.endsAt - 5 * 60 * 1000);
-    return startTime.toISOString();
-  };
-
-  const getRoundEndTime = () => {
-    if (!isLive || !currentBlitzRound?.endsAt) return 'N/A';
-    return new Date(currentBlitzRound.endsAt).toISOString();
-  };
-
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <DebugHud
-        tabName="Blitz"
-        activeUserId={activeUserId}
-        activeGroupId={activeGroupIdBlitz}
-        hasPosted={hasPostedBlitz}
-        roundStart={getRoundStartTime()}
-        roundEnd={getRoundEndTime()}
-        photosCount={blitzPhotosForRound.length}
-      />
+
       <ScrollView 
         style={styles.scrollView} 
         contentContainerStyle={styles.scrollContent}
@@ -113,30 +91,6 @@ export default function BlitzScreen() {
             setActiveGroupIdBlitz(groupId);
           }}
         />
-
-        <View style={styles.debugContainer}>
-          <Text style={styles.debugText}>
-            PHOTOS STORE: hydrated={isHydrated ? 'true' : 'false'}  count={blitzPhotosForRound.length}  lastUpdateSource={lastUpdateSource}
-          </Text>
-          <Text style={styles.debugText}>
-            BLITZ STATE: {isWaiting ? 'armed' : isLive ? 'active' : 'unknown'}
-          </Text>
-          <Text style={styles.debugText}>
-            roundId: {currentBlitzRound?.roundId || 'null'}
-          </Text>
-          <Text style={styles.debugText}>
-            roundStart: {isLive && currentBlitzRound?.endsAt ? new Date(currentBlitzRound.endsAt - 5 * 60 * 1000).toISOString() : 'null'}
-          </Text>
-          <Text style={styles.debugText}>
-            roundEnd: {isLive && currentBlitzRound?.endsAt ? new Date(currentBlitzRound.endsAt).toISOString() : 'null'}
-          </Text>
-          <Text style={styles.debugText}>
-            Photos source: optimistic | Photo IDs: {blitzPhotosForRound.slice(0, 3).map(p => p.photoId.slice(0, 8)).join(', ')}
-          </Text>
-          <Text style={styles.debugText}>
-            blitzActiveGroupId: {activeGroupIdBlitz} | round: {currentBlitzRound?.roundId || 'none'} | photos: {blitzPhotosForRound.length}
-          </Text>
-        </View>
 
         {currentBlitzRound?.prompt && (
           <View style={styles.promptContainer}>
@@ -303,17 +257,5 @@ const styles = StyleSheet.create({
     color: Colors.dark.blitzYellow,
     fontSize: 24,
     fontWeight: '700' as const,
-  },
-  debugContainer: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    marginVertical: 8,
-  },
-  debugText: {
-    color: Colors.dark.textSecondary,
-    fontSize: 12,
-    fontFamily: 'monospace' as const,
   },
 });

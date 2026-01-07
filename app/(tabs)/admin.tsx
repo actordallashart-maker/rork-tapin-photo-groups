@@ -1,5 +1,6 @@
-import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   Database, 
@@ -52,16 +53,36 @@ export default function AdminScreen() {
     showAlert('Success', 'All data cleared');
   }, [clearAllData, showAlert]);
 
-  const handleResetData = useCallback(async () => {
+  const [resetConfirmInput, setResetConfirmInput] = useState('');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const handleResetData = useCallback(() => {
+    setShowResetConfirm(true);
+  }, []);
+
+  const handleConfirmReset = useCallback(async () => {
+    if (resetConfirmInput.toUpperCase() !== 'RESET') {
+      showAlert('Error', 'Please type RESET to confirm');
+      return;
+    }
     console.log('[Admin] Resetting to first launch...');
     await resetToFirstLaunch();
+    setShowResetConfirm(false);
+    setResetConfirmInput('');
     if (Platform.OS === 'web') {
       alert('Reset complete. App state restored to first launch.');
     } else {
       Alert.alert('Reset Complete', 'App state restored to first launch. New user ID generated.');
     }
     router.replace('/(tabs)');
-  }, [resetToFirstLaunch, router]);
+  }, [resetToFirstLaunch, router, resetConfirmInput, showAlert]);
+
+  const handleLockAdmin = useCallback(async () => {
+    console.log('[Admin] Locking admin tab...');
+    await AsyncStorage.removeItem('tapin_admin_unlocked_v1');
+    showAlert('Locked', 'Admin tab will be hidden after navigation.');
+    router.replace('/(tabs)');
+  }, [router, showAlert]);
 
   const handleEndBlitzRound = useCallback(() => {
     if (!currentBlitzRound || currentBlitzRound.status !== 'live') {
@@ -95,9 +116,21 @@ export default function AdminScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Admin</Text>
+          <Text style={styles.title}>ADMIN (Hidden)</Text>
           <Text style={styles.subtitle}>Testing & Debug Tools</Text>
         </View>
+
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.lockButton]}
+          onPress={handleLockAdmin}
+          activeOpacity={0.7}
+        >
+          <RefreshCw size={20} color="#FFA500" />
+          <View style={styles.buttonContent}>
+            <Text style={styles.buttonTitle}>Lock Admin</Text>
+            <Text style={styles.buttonSubtitle}>Hide admin tab from tab bar</Text>
+          </View>
+        </TouchableOpacity>
 
         <View style={styles.statsContainer}>
           <Text style={styles.sectionTitle}>Current Stats</Text>
@@ -160,17 +193,52 @@ export default function AdminScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.resetButton]}
-            onPress={handleResetData}
-            activeOpacity={0.7}
-          >
-            <RefreshCw size={20} color="#FF4444" />
-            <View style={styles.buttonContent}>
-              <Text style={styles.buttonTitle}>Reset Data (First Launch)</Text>
-              <Text style={styles.buttonSubtitle}>Clear ALL app data + regenerate user ID</Text>
+          {showResetConfirm ? (
+            <View style={[styles.actionButton, styles.resetButton]}>
+              <View style={styles.confirmContainer}>
+                <Text style={styles.confirmTitle}>Type RESET to confirm:</Text>
+                <TextInput
+                  style={styles.confirmInput}
+                  value={resetConfirmInput}
+                  onChangeText={setResetConfirmInput}
+                  placeholder="Type RESET"
+                  placeholderTextColor={Colors.dark.textSecondary}
+                  autoCapitalize="characters"
+                />
+                <View style={styles.confirmButtons}>
+                  <TouchableOpacity
+                    style={styles.confirmButton}
+                    onPress={handleConfirmReset}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.confirmButtonText}>Confirm</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.confirmButton, styles.cancelButton]}
+                    onPress={() => {
+                      setShowResetConfirm(false);
+                      setResetConfirmInput('');
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.confirmButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
-          </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.resetButton]}
+              onPress={handleResetData}
+              activeOpacity={0.7}
+            >
+              <RefreshCw size={20} color="#FF4444" />
+              <View style={styles.buttonContent}>
+                <Text style={styles.buttonTitle}>Reset Data (First Launch)</Text>
+                <Text style={styles.buttonSubtitle}>Clear ALL app data + regenerate user ID</Text>
+              </View>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity 
             style={styles.actionButton}
@@ -339,5 +407,50 @@ const styles = StyleSheet.create({
   resetButton: {
     borderWidth: 2,
     borderColor: '#FF4444',
+    flexDirection: 'column',
+  },
+  lockButton: {
+    borderWidth: 2,
+    borderColor: '#FFA500',
+    marginBottom: 16,
+  },
+  confirmContainer: {
+    flex: 1,
+    width: '100%',
+  },
+  confirmTitle: {
+    color: Colors.dark.text,
+    fontSize: 14,
+    fontWeight: '600' as const,
+    marginBottom: 8,
+  },
+  confirmInput: {
+    backgroundColor: Colors.dark.background,
+    color: Colors.dark.text,
+    fontSize: 16,
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    marginBottom: 12,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  confirmButton: {
+    flex: 1,
+    backgroundColor: '#FF4444',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: Colors.dark.border,
+  },
+  confirmButtonText: {
+    color: Colors.dark.text,
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
 });

@@ -1,12 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppData } from '@/providers/AppDataProvider';
 import GroupSwitcher from '@/components/GroupSwitcher';
 import PhotoContainer from '@/components/PhotoContainer';
 import BlitzLivePill from '@/components/BlitzLivePill';
-import DebugHud from '@/components/DebugHud';
+
 import Colors from '@/constants/colors';
 
 export default function TodayScreen() {
@@ -20,12 +21,7 @@ export default function TodayScreen() {
     updateTodayPhotoPosition,
     getBlitzRoundForGroup,
     setActiveGroupIdBlitz,
-    activeUserId,
     hasPostedToday,
-    todayCycleStart,
-    todayCycleEnd,
-    isHydrated,
-    lastUpdateSource,
   } = useAppData();
 
   const [blitzSecondsRemaining, setBlitzSecondsRemaining] = useState<number | null>(null);
@@ -62,22 +58,35 @@ export default function TodayScreen() {
     return now.toLocaleDateString('en-US', options);
   };
 
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleTapIn = useCallback(() => {
     console.log('[Today] Tap In pressed');
     router.push('/camera?mode=today');
   }, [router]);
 
+  const handleLongPressStart = useCallback(() => {
+    longPressTimer.current = setTimeout(async () => {
+      console.log('[Today] Admin unlock triggered');
+      await AsyncStorage.setItem('tapin_admin_unlocked_v1', 'true');
+      if (Platform.OS === 'web') {
+        alert('Admin unlocked! Navigate to Admin tab.');
+      } else {
+        Alert.alert('Admin Unlocked', 'Admin tab is now visible in the tab bar.');
+      }
+    }, 2000);
+  }, []);
+
+  const handleLongPressEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      <DebugHud
-        tabName="Today"
-        activeUserId={activeUserId}
-        activeGroupId={activeGroupIdToday}
-        hasPosted={hasPostedToday}
-        cycleStart={todayCycleStart}
-        cycleEnd={todayCycleEnd}
-        photosCount={todayPhotosForGroup.length}
-      />
+
       <ScrollView 
         style={styles.scrollView} 
         contentContainerStyle={styles.scrollContent}
@@ -97,18 +106,6 @@ export default function TodayScreen() {
             setActiveGroupIdToday(groupId);
           }}
         />
-
-        <View style={styles.debugContainer}>
-          <Text style={styles.debugText}>
-            PHOTOS STORE: hydrated={isHydrated ? 'true' : 'false'}  count={todayPhotosForGroup.length}  lastUpdateSource={lastUpdateSource}
-          </Text>
-          <Text style={styles.debugText}>
-            Photos source: optimistic | Photo IDs: {todayPhotosForGroup.slice(0, 3).map(p => p.photoId.slice(0, 8)).join(', ')}
-          </Text>
-          <Text style={styles.debugText}>
-            todayActiveGroupId: {activeGroupIdToday} | photos: {todayPhotosForGroup.length}
-          </Text>
-        </View>
 
         {isBlitzLive && blitzSecondsRemaining !== null && (
           <View style={styles.blitzPillContainer}>
@@ -135,8 +132,11 @@ export default function TodayScreen() {
             hasPostedToday && styles.tapInButtonDisabled
           ]} 
           onPress={handleTapIn}
+          onLongPress={handleLongPressStart}
+          onPressOut={handleLongPressEnd}
           activeOpacity={0.8}
           disabled={hasPostedToday}
+          delayLongPress={2000}
         >
           <View style={styles.tapInButtonInner}>
             <Text style={styles.tapInButtonText}>
@@ -215,17 +215,5 @@ const styles = StyleSheet.create({
   },
   tapInButtonDisabled: {
     opacity: 0.5,
-  },
-  debugContainer: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 8,
-    marginVertical: 8,
-  },
-  debugText: {
-    color: Colors.dark.textSecondary,
-    fontSize: 12,
-    fontFamily: 'monospace' as const,
   },
 });
