@@ -8,6 +8,7 @@ import Constants from 'expo-constants';
 import { AppDataProvider } from "@/providers/AppDataProvider";
 import ConfigBlocker from "@/components/ConfigBlocker";
 import Colors from "@/constants/colors";
+import { trpc, trpcClient } from "@/lib/trpc";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -82,23 +83,27 @@ export default function RootLayout() {
 
   if (missingKeys.length > 0) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <StatusBar style="light" />
-          <ConfigBlocker missingKeys={missingKeys} />
-        </GestureHandlerRootView>
-      </QueryClientProvider>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <StatusBar style="light" />
+            <ConfigBlocker missingKeys={missingKeys} />
+          </GestureHandlerRootView>
+        </QueryClientProvider>
+      </trpc.Provider>
     );
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <AppDataProvider>
-          <StatusBar style="light" />
-          <RootLayoutNav />
-        </AppDataProvider>
-      </GestureHandlerRootView>
-    </QueryClientProvider>
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <AppDataProvider>
+            <StatusBar style="light" />
+            <RootLayoutNav />
+          </AppDataProvider>
+        </GestureHandlerRootView>
+      </QueryClientProvider>
+    </trpc.Provider>
   );
 }
