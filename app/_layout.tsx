@@ -4,7 +4,6 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import Constants from 'expo-constants';
 import { AppDataProvider } from "@/providers/AppDataProvider";
 import ConfigBlocker from "@/components/ConfigBlocker";
 import Colors from "@/constants/colors";
@@ -41,30 +40,47 @@ function RootLayoutNav() {
   );
 }
 
-function checkRequiredConfig(): string[] {
+function checkRequiredConfig(): { missing: string[], envDebug: Record<string, string> } {
   const missing: string[] = [];
-  const env = Constants.expoConfig?.extra || {};
   
-  const firebaseApiKey = env.EXPO_PUBLIC_FIREBASE_API_KEY;
-  const firebaseProjectId = env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
+  const apiKey =
+    process.env.EXPO_PUBLIC_FIREBASE_API_KEY ||
+    process.env.FIREBASE_API_KEY ||
+    "";
+
+  const projectId =
+    process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID ||
+    process.env.FIREBASE_PROJECT_ID ||
+    "";
   
-  const firebaseConfigured = firebaseApiKey && firebaseProjectId;
+  const firebaseConfigured = !!apiKey && !!projectId;
   
   if (!firebaseConfigured) {
     missing.push('EXPO_PUBLIC_FIREBASE_API_KEY', 'EXPO_PUBLIC_FIREBASE_PROJECT_ID');
   }
   
-  return missing;
+  const envDebug = {
+    EXPO_PUBLIC_FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "(empty)",
+    EXPO_PUBLIC_FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "(empty)",
+    FIREBASE_API_KEY: process.env.FIREBASE_API_KEY || "(empty)",
+    FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID || "(empty)",
+    resolvedApiKey: apiKey || "(empty)",
+    resolvedProjectId: projectId || "(empty)",
+  };
+  
+  return { missing, envDebug };
 }
 
 export default function RootLayout() {
   const [missingKeys, setMissingKeys] = useState<string[]>([]);
+  const [envDebug, setEnvDebug] = useState<Record<string, string>>({});
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
     SplashScreen.hideAsync();
-    const missing = checkRequiredConfig();
-    setMissingKeys(missing);
+    const result = checkRequiredConfig();
+    setMissingKeys(result.missing);
+    setEnvDebug(result.envDebug);
     setIsChecking(false);
   }, []);
 
@@ -78,7 +94,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <StatusBar style="light" />
-            <ConfigBlocker missingKeys={missingKeys} />
+            <ConfigBlocker missingKeys={missingKeys} envDebug={envDebug} />
           </GestureHandlerRootView>
         </QueryClientProvider>
       </trpc.Provider>

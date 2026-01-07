@@ -5,9 +5,14 @@ import Colors from '@/constants/colors';
 
 interface ConfigBlockerProps {
   missingKeys: string[];
+  envDebug?: Record<string, string>;
 }
 
-export default function ConfigBlocker({ missingKeys }: ConfigBlockerProps) {
+export default function ConfigBlocker({ missingKeys, envDebug }: ConfigBlockerProps) {
+  const maskValue = (val: string) => {
+    if (!val || val === "(empty)") return val;
+    return val.length > 6 ? val.substring(0, 6) + "..." : val;
+  };
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -42,6 +47,22 @@ export default function ConfigBlocker({ missingKeys }: ConfigBlockerProps) {
             4. Restart the app
           </Text>
         </View>
+
+        {envDebug && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>ENV DEBUG (temporary):</Text>
+            {Object.entries(envDebug).map(([key, value]) => {
+              const displayValue = key.includes('ApiKey') || key.includes('API_KEY') 
+                ? maskValue(value)
+                : value;
+              return (
+                <Text key={key} style={styles.envDebug}>
+                  {key}: {displayValue}
+                </Text>
+              );
+            })}
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Firebase Configuration Example:</Text>
@@ -109,5 +130,15 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginTop: 4,
     marginBottom: 4,
+  },
+  envDebug: {
+    fontSize: 12,
+    color: Colors.dark.accent,
+    fontFamily: 'monospace',
+    backgroundColor: Colors.dark.surface,
+    padding: 6,
+    borderRadius: 4,
+    marginTop: 2,
+    marginBottom: 2,
   },
 });
