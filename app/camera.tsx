@@ -122,40 +122,42 @@ export default function CameraScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-            <X size={28} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.title}>
-            {mode === 'blitz' ? 'Blitz Photo' : 'Today Photo'}
-          </Text>
-          <View style={{ width: 40 }} />
-        </View>
-
+      <View style={styles.container}>
         {capturedImage ? (
-          <View style={styles.previewContainer}>
-            <View style={styles.imageWrapper}>
-              <Image source={{ uri: capturedImage }} style={styles.previewImage} />
-              {overlayText.trim() && (
-                <View style={styles.textOverlayPreview}>
-                  <Text
-                    style={[
-                      styles.overlayText,
-                      {
-                        fontSize: textSize === 'S' ? 14 : textSize === 'M' ? 20 : 28,
-                        color: textColor,
-                      },
-                    ]}
-                  >
-                    {overlayText}
-                  </Text>
-                </View>
-              )}
+          <>
+            <Image source={{ uri: capturedImage }} style={styles.previewImage} resizeMode="cover" />
+            {overlayText.trim() && (
+              <View style={styles.textOverlayPreview}>
+                <Text
+                  style={[
+                    styles.overlayText,
+                    {
+                      fontSize: textSize === 'S' ? 14 : textSize === 'M' ? 20 : 28,
+                      color: textColor,
+                    },
+                  ]}
+                >
+                  {overlayText}
+                </Text>
+              </View>
+            )}
+            
+            <View style={[styles.debugLabel, { top: insets.top + 10 }]}>
+              <Text style={styles.debugText}>PREVIEW FULLSCREEN OK</Text>
+            </View>
+
+            <View style={[styles.headerOverlay, { paddingTop: insets.top }]}>
+              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+                <X size={28} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.title}>
+                {mode === 'blitz' ? 'Blitz Photo' : 'Today Photo'}
+              </Text>
+              <View style={{ width: 40 }} />
             </View>
 
             {showTextEditor ? (
-              <View style={styles.textEditorContainer}>
+              <View style={[styles.textEditorOverlay, { paddingBottom: insets.bottom }]}>
                 <TextInput
                   style={styles.textInput}
                   placeholder="Add text..."
@@ -192,7 +194,7 @@ export default function CameraScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.actionButtons}>
+              <View style={[styles.actionButtonsOverlay, { paddingBottom: insets.bottom }]}>
                 <TouchableOpacity style={styles.actionButton} onPress={handleRetake}>
                   <RotateCcw size={24} color="white" />
                   <Text style={styles.actionButtonText}>Retake</Text>
@@ -209,15 +211,30 @@ export default function CameraScreen() {
                 </TouchableOpacity>
               </View>
             )}
-          </View>
+          </>
         ) : (
-          <View style={styles.cameraContainer}>
+          <>
             <CameraView
               ref={cameraRef}
-              style={styles.camera}
+              style={StyleSheet.absoluteFillObject}
               facing={facing}
             />
-            <View style={styles.cameraControls}>
+            
+            <View style={[styles.debugLabel, { top: insets.top + 10 }]}>
+              <Text style={styles.debugText}>CAMERA FULLSCREEN OK</Text>
+            </View>
+
+            <View style={[styles.headerOverlay, { paddingTop: insets.top }]}>
+              <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
+                <X size={28} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.title}>
+                {mode === 'blitz' ? 'Blitz Photo' : 'Today Photo'}
+              </Text>
+              <View style={{ width: 40 }} />
+            </View>
+
+            <View style={[styles.cameraControls, { bottom: insets.bottom + 40 }]}>
               <TouchableOpacity style={styles.flipButton} onPress={toggleFacing}>
                 <RotateCcw size={28} color="white" />
               </TouchableOpacity>
@@ -226,7 +243,7 @@ export default function CameraScreen() {
               </TouchableOpacity>
               <View style={{ width: 60 }} />
             </View>
-          </View>
+          </>
         )}
       </View>
     </>
@@ -236,14 +253,33 @@ export default function CameraScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: '#000000',
   },
-  header: {
+  debugLabel: {
+    position: 'absolute',
+    left: 10,
+    backgroundColor: 'rgba(0, 255, 0, 0.8)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    zIndex: 1000,
+  },
+  debugText: {
+    color: '#000000',
+    fontSize: 10,
+    fontWeight: '700' as const,
+  },
+  headerOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   closeButton: {
     width: 40,
@@ -286,15 +322,8 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     fontSize: 16,
   },
-  cameraContainer: {
-    flex: 1,
-  },
-  camera: {
-    flex: 1,
-  },
   cameraControls: {
     position: 'absolute',
-    bottom: 40,
     left: 0,
     right: 0,
     flexDirection: 'row',
@@ -326,19 +355,8 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: Colors.dark.blitzYellow,
   },
-  previewContainer: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  imageWrapper: {
-    aspectRatio: 1,
-    borderRadius: 24,
-    overflow: 'hidden',
-    marginBottom: 24,
-  },
   previewImage: {
-    width: '100%',
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
   },
   textOverlayPreview: {
     position: 'absolute',
@@ -352,11 +370,19 @@ const styles = StyleSheet.create({
   overlayText: {
     fontWeight: '600' as const,
   },
-  actionButtons: {
+  actionButtonsOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
   actionButton: {
     flex: 1,
@@ -386,8 +412,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
   },
-  textEditorContainer: {
+  textEditorOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     gap: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
   },
   textInput: {
     backgroundColor: Colors.dark.surface,
