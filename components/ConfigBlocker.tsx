@@ -14,7 +14,7 @@ export default function ConfigBlocker({ missingKeys }: ConfigBlockerProps) {
         <View style={styles.header}>
           <Text style={styles.title}>Backend Not Configured</Text>
           <Text style={styles.subtitle}>
-            TapIn requires backend services to run in production mode
+            TapIn requires Firebase backend services to run.
           </Text>
         </View>
 
@@ -30,13 +30,13 @@ export default function ConfigBlocker({ missingKeys }: ConfigBlockerProps) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Required Setup:</Text>
           <Text style={styles.helpText}>
-            1. Choose a backend service (Supabase, Firebase, or custom API)
+            1. Create a Firebase project at console.firebase.google.com
           </Text>
           <Text style={styles.helpText}>
-            2. Add required environment variables to your .env file
+            2. Add Firebase environment variables to your .env file
           </Text>
           <Text style={styles.helpText}>
-            3. Configure authentication and database
+            3. Configure Firebase Authentication and Firestore
           </Text>
           <Text style={styles.helpText}>
             4. Restart the app
@@ -44,12 +44,11 @@ export default function ConfigBlocker({ missingKeys }: ConfigBlockerProps) {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recommended: Supabase</Text>
-          <Text style={styles.helpText}>
-            Create a Supabase project and add:
-          </Text>
-          <Text style={styles.envExample}>EXPO_PUBLIC_SUPABASE_URL=https://xxx.supabase.co</Text>
-          <Text style={styles.envExample}>EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJxxx...</Text>
+          <Text style={styles.sectionTitle}>Firebase Configuration Example:</Text>
+          <Text style={styles.envExample}>EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyxxx...</Text>
+          <Text style={styles.envExample}>EXPO_PUBLIC_FIREBASE_PROJECT_ID=your-project-id</Text>
+          <Text style={styles.envExample}>EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com</Text>
+          <Text style={styles.envExample}>EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

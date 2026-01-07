@@ -45,22 +45,13 @@ function checkRequiredConfig(): string[] {
   const missing: string[] = [];
   const env = Constants.expoConfig?.extra || {};
   
-  const supabaseUrl = env.EXPO_PUBLIC_SUPABASE_URL;
-  const supabaseKey = env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   const firebaseApiKey = env.EXPO_PUBLIC_FIREBASE_API_KEY;
   const firebaseProjectId = env.EXPO_PUBLIC_FIREBASE_PROJECT_ID;
-  const apiBaseUrl = env.EXPO_PUBLIC_API_BASE_URL;
   
-  const hasSupabase = supabaseUrl && supabaseKey;
-  const hasFirebase = firebaseApiKey && firebaseProjectId;
-  const hasCustomApi = apiBaseUrl;
+  const firebaseConfigured = firebaseApiKey && firebaseProjectId;
   
-  if (!hasSupabase && !hasFirebase && !hasCustomApi) {
-    missing.push('EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_ANON_KEY');
-    missing.push('OR');
+  if (!firebaseConfigured) {
     missing.push('EXPO_PUBLIC_FIREBASE_API_KEY', 'EXPO_PUBLIC_FIREBASE_PROJECT_ID');
-    missing.push('OR');
-    missing.push('EXPO_PUBLIC_API_BASE_URL');
   }
   
   return missing;
