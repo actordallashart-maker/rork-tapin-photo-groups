@@ -82,6 +82,7 @@ export default function BlitzScreen() {
           )}
         </View>
 
+        <Text style={styles.debugText}>uid={uid?.slice(0, 6) || 'none'} groups={groups.length} activeGroupId={activeGroupId?.slice(0, 8) || 'none'}</Text>
         <Text style={styles.debugText}>Group: {activeGroupId?.slice(0, 8) || 'none'} | Round: {currentBlitzRound?.roundId?.slice(0, 8) || 'none'}</Text>
         <Text style={styles.debugText}>UploadPath: groups/{activeGroupId?.slice(0, 8) || 'X'}/blitz/{currentBlitzRound?.roundId?.slice(0, 8) || 'Y'}/{uid?.slice(0, 6) || 'Z'}/blitz_*.jpg</Text>
 

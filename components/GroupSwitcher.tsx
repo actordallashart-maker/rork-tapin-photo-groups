@@ -148,6 +148,7 @@ export default function GroupSwitcher({ groups, selectedGroupId, onSelectGroup }
 
   return (
     <View style={styles.container}>
+      <Text style={styles.debugText}>selected={selectedGroupId.slice(0, 8)}</Text>
       <FlatList
         ref={flatListRef}
         data={groups}
@@ -235,5 +236,12 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     fontSize: 8,
     fontWeight: '600' as const,
+  },
+  debugText: {
+    fontSize: 9,
+    color: Colors.dark.textSecondary,
+    textAlign: 'center' as const,
+    marginBottom: 4,
+    fontFamily: 'monospace' as const,
   },
 });

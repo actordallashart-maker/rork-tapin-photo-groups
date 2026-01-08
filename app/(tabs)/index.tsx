@@ -96,6 +96,7 @@ export default function TodayScreen() {
           <Text style={styles.date}>{formatDate()}</Text>
         </View>
 
+        <Text style={styles.debugText}>uid={uid?.slice(0, 6) || 'none'} groups={groups.length} activeGroupId={activeGroupId?.slice(0, 8) || 'none'}</Text>
         <Text style={styles.debugText}>Group: {activeGroupId?.slice(0, 8) || 'none'} | Cycle: {new Date().toISOString().split('T')[0]}</Text>
         <Text style={styles.debugText}>UploadPath: groups/{activeGroupId?.slice(0, 8) || 'X'}/today/{new Date().toISOString().split('T')[0]}/{uid?.slice(0, 6) || 'Z'}/today_*.jpg</Text>
 
