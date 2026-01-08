@@ -5,15 +5,17 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
   Platform,
+  Share,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X, Plus, Trash2 } from 'lucide-react-native';
-import { useAppData } from '@/providers/AppDataProvider';
+import { X, Trash2, Share2 } from 'lucide-react-native';
+import { useGroups } from '@/providers/GroupsProvider';
+import { useAuth } from '@/providers/AuthProvider';
 import Colors from '@/constants/colors';
+import * as Clipboard from 'expo-clipboard';
 
 const AVATAR_COLORS = ['#FF6B6B', '#4ECDC4', '#A78BFA', '#F472B6', '#60A5FA', '#FCD34D'];
 
@@ -21,56 +23,85 @@ export default function GroupDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { groups, addMemberToGroup, removeMemberFromGroup } = useAppData();
+  const { getGroup, generateInviteLink, removeMemberFromGroup: removeFromGroup } = useGroups();
+  const { uid } = useAuth();
 
-  const [isAddingMember, setIsAddingMember] = useState(false);
-  const [newMemberName, setNewMemberName] = useState('');
+  const [lastInviteLink, setLastInviteLink] = useState<string>('');
+  const [inviteGeneratedAt, setInviteGeneratedAt] = useState<string>('');
 
   const group = useMemo(() => {
-    return groups.find((g) => g.groupId === groupId);
-  }, [groups, groupId]);
+    return getGroup(groupId || '');
+  }, [getGroup, groupId]);
 
-  const handleAddMember = useCallback(() => {
-    if (!newMemberName.trim() || !groupId) {
+  const handleGenerateInvite = useCallback(async () => {
+    if (!groupId) return;
+
+    const result = await generateInviteLink(groupId);
+    if (result.success && result.inviteLink) {
+      setLastInviteLink(result.inviteLink);
+      setInviteGeneratedAt(new Date().toLocaleTimeString());
+
       if (Platform.OS === 'web') {
-        alert('Please enter a member name');
+        await Clipboard.setStringAsync(result.inviteLink);
+        alert('Invite link copied to clipboard!');
       } else {
-        Alert.alert('Error', 'Please enter a member name');
+        Alert.alert(
+          'Invite Link Generated',
+          result.inviteLink,
+          [
+            { 
+              text: 'Copy', 
+              onPress: async () => {
+                await Clipboard.setStringAsync(result.inviteLink!);
+              }
+            },
+            { 
+              text: 'Share', 
+              onPress: async () => {
+                try {
+                  await Share.share({ message: result.inviteLink! });
+                } catch (err) {
+                  console.error('Error sharing:', err);
+                }
+              }
+            },
+            { text: 'Close', style: 'cancel' },
+          ]
+        );
       }
-      return;
+    } else {
+      if (Platform.OS === 'web') {
+        alert(result.error || 'Failed to generate invite');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to generate invite');
+      }
     }
-
-    const initials = newMemberName
-      .trim()
-      .split(' ')
-      .map((n) => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-
-    console.log('[GroupDetail] Adding member:', newMemberName);
-    addMemberToGroup(groupId, newMemberName.trim(), initials);
-    setNewMemberName('');
-    setIsAddingMember(false);
-  }, [newMemberName, groupId, addMemberToGroup]);
+  }, [groupId, generateInviteLink]);
 
   const handleRemoveMember = useCallback(
-    (userId: string, memberName: string) => {
+    async (memberUid: string, memberEmail: string) => {
       if (!groupId) return;
 
-      const confirmRemove = () => {
-        console.log('[GroupDetail] Removing member:', userId);
-        removeMemberFromGroup(groupId, userId);
+      const confirmRemove = async () => {
+        console.log('[GroupDetail] Removing member:', memberUid);
+        const result = await removeFromGroup(groupId, memberUid);
+        if (!result.success) {
+          if (Platform.OS === 'web') {
+            alert(result.error || 'Failed to remove member');
+          } else {
+            Alert.alert('Error', result.error || 'Failed to remove member');
+          }
+        }
       };
 
       if (Platform.OS === 'web') {
-        if (window.confirm(`Remove ${memberName} from this group?`)) {
-          confirmRemove();
+        if (window.confirm(`Remove ${memberEmail} from this group?`)) {
+          await confirmRemove();
         }
       } else {
         Alert.alert(
           'Remove Member',
-          `Remove ${memberName} from this group?`,
+          `Remove ${memberEmail} from this group?`,
           [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Remove', style: 'destructive', onPress: confirmRemove },
@@ -78,7 +109,7 @@ export default function GroupDetailScreen() {
         );
       }
     },
-    [groupId, removeMemberFromGroup]
+    [groupId, removeFromGroup]
   );
 
   if (!group) {
@@ -105,7 +136,7 @@ export default function GroupDetailScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.closeButton}>
             <X size={28} color={Colors.dark.text} />
           </TouchableOpacity>
-          <Text style={styles.title}>{group.groupName}</Text>
+          <Text style={styles.title}>{group.name}</Text>
           <View style={{ width: 40 }} />
         </View>
 
@@ -118,9 +149,12 @@ export default function GroupDetailScreen() {
             <View style={styles.groupIcon}>
               <Text style={styles.groupEmoji}>{group.emoji || '👥'}</Text>
             </View>
-            <Text style={styles.groupName}>{group.groupName}</Text>
+            <Text style={styles.groupName}>{group.name}</Text>
             <Text style={styles.memberCount}>
               {group.members.length} member{group.members.length !== 1 ? 's' : ''}
+            </Text>
+            <Text style={styles.debugText}>
+              Source: firestore | Members: {group.members.length}
             </Text>
           </View>
 
@@ -128,59 +162,50 @@ export default function GroupDetailScreen() {
 
           <View style={styles.membersList}>
             {group.members.map((member, index) => (
-              <View key={member.userId} style={styles.memberItem}>
+              <View key={member.uid} style={styles.memberItem}>
                 <View
                   style={[
                     styles.memberAvatar,
                     { backgroundColor: AVATAR_COLORS[index % AVATAR_COLORS.length] },
                   ]}
                 >
-                  <Text style={styles.memberInitials}>{member.initials}</Text>
+                  <Text style={styles.memberInitials}>
+                    {member.username?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
+                  </Text>
                 </View>
-                <Text style={styles.memberName}>{member.name}</Text>
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() => handleRemoveMember(member.userId, member.name)}
-                >
-                  <Trash2 size={18} color={Colors.dark.textSecondary} />
-                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.memberName}>{member.username || member.email}</Text>
+                  {member.role === 'owner' && (
+                    <Text style={styles.memberRole}>Owner</Text>
+                  )}
+                </View>
+                {member.uid !== uid && (
+                  <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => handleRemoveMember(member.uid, member.email)}
+                  >
+                    <Trash2 size={18} color={Colors.dark.textSecondary} />
+                  </TouchableOpacity>
+                )}
               </View>
             ))}
           </View>
 
-          {isAddingMember ? (
-            <View style={styles.addMemberForm}>
-              <TextInput
-                style={styles.input}
-                placeholder="Member name"
-                placeholderTextColor={Colors.dark.textSecondary}
-                value={newMemberName}
-                onChangeText={setNewMemberName}
-                autoFocus
-              />
-              <View style={styles.formButtons}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={() => {
-                    setIsAddingMember(false);
-                    setNewMemberName('');
-                  }}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.addButton} onPress={handleAddMember}>
-                  <Text style={styles.addButtonText}>Add Member</Text>
-                </TouchableOpacity>
-              </View>
+          <TouchableOpacity
+            style={styles.inviteButton}
+            onPress={handleGenerateInvite}
+            activeOpacity={0.8}
+          >
+            <Share2 size={20} color="white" />
+            <Text style={styles.inviteButtonText}>Generate Invite Link</Text>
+          </TouchableOpacity>
+
+          {lastInviteLink && (
+            <View style={styles.inviteLinkContainer}>
+              <Text style={styles.inviteLinkLabel}>Last invite link:</Text>
+              <Text style={styles.inviteLink} numberOfLines={1}>{lastInviteLink}</Text>
+              <Text style={styles.inviteTime}>Generated at: {inviteGeneratedAt}</Text>
             </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.addMemberButton}
-              onPress={() => setIsAddingMember(true)}
-            >
-              <Plus size={20} color={Colors.dark.accent} />
-              <Text style={styles.addMemberButtonText}>Add Member</Text>
-            </TouchableOpacity>
           )}
         </ScrollView>
       </View>
@@ -277,10 +302,14 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
   },
   memberName: {
-    flex: 1,
     color: Colors.dark.text,
     fontSize: 16,
     fontWeight: '500' as const,
+  },
+  memberRole: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+    marginTop: 2,
   },
   removeButton: {
     padding: 8,
@@ -367,5 +396,44 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  inviteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.dark.accent,
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  inviteButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600' as const,
+  },
+  inviteLinkContainer: {
+    backgroundColor: Colors.dark.surface,
+    padding: 16,
+    borderRadius: 12,
+    marginTop: 16,
+    gap: 6,
+  },
+  inviteLinkLabel: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+  },
+  inviteLink: {
+    color: Colors.dark.text,
+    fontSize: 14,
+    fontFamily: 'monospace',
+  },
+  inviteTime: {
+    color: Colors.dark.textSecondary,
+    fontSize: 11,
+  },
+  debugText: {
+    color: Colors.dark.textSecondary,
+    fontSize: 11,
+    marginTop: 4,
   },
 });

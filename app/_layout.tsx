@@ -6,6 +6,8 @@ import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { AppDataProvider } from "@/providers/AppDataProvider";
 import { AuthProvider } from "@/providers/AuthProvider";
+import { SocialProvider } from "@/providers/SocialProvider";
+import { GroupsProvider } from "@/providers/GroupsProvider";
 import ConfigBlocker from "@/components/ConfigBlocker";
 import Colors from "@/constants/colors";
 import { trpc, trpcClient } from "@/lib/trpc";
@@ -107,10 +109,14 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <AuthProvider>
-            <AppDataProvider>
-              <StatusBar style="light" />
-              <RootLayoutNav />
-            </AppDataProvider>
+            <SocialProvider>
+              <GroupsProvider>
+                <AppDataProvider>
+                  <StatusBar style="light" />
+                  <RootLayoutNav />
+                </AppDataProvider>
+              </GroupsProvider>
+            </SocialProvider>
           </AuthProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>

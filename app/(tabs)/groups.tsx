@@ -14,6 +14,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Users, Plus, X, LogIn, LogOut } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useGroups } from '@/providers/GroupsProvider';
+import { useSocial } from '@/providers/SocialProvider';
 import AuthModal from '@/components/AuthModal';
 import Colors from '@/constants/colors';
 
@@ -22,15 +24,17 @@ const EMOJI_OPTIONS = ['👯', '👨‍👩‍👧‍👦', '💼', '🎉', '�
 export default function GroupsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { groups, addGroup, activeUserId } = useAppData();
+  const { activeUserId } = useAppData();
   const { uid, email, signOut } = useAuth();
+  const { groups, createGroup } = useGroups();
+  const { friendCount } = useSocial();
   const [isCreating, setIsCreating] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState(EMOJI_OPTIONS[0]);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
 
-  const handleCreateGroup = useCallback(() => {
+  const handleCreateGroup = useCallback(async () => {
     if (!uid) {
       setShowAuthModal(true);
       return;
@@ -44,11 +48,19 @@ export default function GroupsScreen() {
       return;
     }
     console.log('[Groups] Creating group:', newGroupName, selectedEmoji);
-    addGroup(newGroupName.trim(), selectedEmoji);
-    setNewGroupName('');
-    setSelectedEmoji(EMOJI_OPTIONS[0]);
-    setIsCreating(false);
-  }, [newGroupName, selectedEmoji, addGroup, uid]);
+    const result = await createGroup(newGroupName.trim(), selectedEmoji);
+    if (result.success) {
+      setNewGroupName('');
+      setSelectedEmoji(EMOJI_OPTIONS[0]);
+      setIsCreating(false);
+    } else {
+      if (Platform.OS === 'web') {
+        alert(result.error || 'Failed to create group');
+      } else {
+        Alert.alert('Error', result.error || 'Failed to create group');
+      }
+    }
+  }, [newGroupName, selectedEmoji, createGroup, uid]);
 
   const handleSignOut = useCallback(async () => {
     const confirmSignOut = () => {
@@ -86,6 +98,11 @@ export default function GroupsScreen() {
             <View>
               <Text style={styles.title}>Groups</Text>
               <Text style={styles.subtitle}>Manage your groups</Text>
+              {uid && (
+                <Text style={styles.debugText}>
+                  Source: firestore | Groups: {groups.length} | Friends: {friendCount}
+                </Text>
+              )}
             </View>
             {uid ? (
               <TouchableOpacity 
@@ -184,7 +201,7 @@ export default function GroupsScreen() {
                 <Text style={styles.groupEmoji}>{group.emoji || '👥'}</Text>
               </View>
               <View style={styles.groupInfo}>
-                <Text style={styles.groupName}>{group.groupName}</Text>
+                <Text style={styles.groupName}>{group.name}</Text>
                 <Text style={styles.memberCount}>
                   {group.members.length} member{group.members.length !== 1 ? 's' : ''}
                 </Text>
@@ -192,7 +209,7 @@ export default function GroupsScreen() {
               <View style={styles.avatarStack}>
                 {group.members.slice(0, 3).map((member, index) => (
                   <View
-                    key={member.userId}
+                    key={member.uid}
                     style={[
                       styles.memberAvatar,
                       { 
@@ -202,7 +219,9 @@ export default function GroupsScreen() {
                       }
                     ]}
                   >
-                    <Text style={styles.memberInitials}>{member.initials}</Text>
+                    <Text style={styles.memberInitials}>
+                      {member.username?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -465,5 +484,10 @@ const styles = StyleSheet.create({
   emptySubtext: {
     color: Colors.dark.textSecondary,
     fontSize: 14,
+  },
+  debugText: {
+    color: Colors.dark.textSecondary,
+    fontSize: 11,
+    marginTop: 4,
   },
 });
