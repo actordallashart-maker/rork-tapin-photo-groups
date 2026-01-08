@@ -16,6 +16,9 @@ import { useAppData } from '@/providers/AppDataProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { TextOverlay } from '@/types';
 import Colors from '@/constants/colors';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage, db } from '@/lib/firebase';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
 
 const TEXT_SIZES: ('S' | 'M' | 'L')[] = ['S', 'M', 'L'];
 const TEXT_COLORS = ['#FFFFFF', '#000000', '#FF6B6B', '#4ECDC4', '#FFD93D', '#A78BFA'];
@@ -34,6 +37,7 @@ export default function CameraScreen() {
     activeUserId,
     hasPostedToday,
     hasPostedBlitz,
+    currentBlitzRound,
   } = useAppData();
   const { uid } = useAuth();
   const cameraRef = useRef<CameraView>(null);
@@ -133,7 +137,38 @@ export default function CameraScreen() {
     
     try {
       if (mode === 'blitz') {
-        addBlitzPhoto(capturedImage, textOverlay);
+        const roundId = currentBlitzRound?.roundId;
+        if (!roundId) {
+          setPostState('error');
+          setPostError('No active Blitz round');
+          return;
+        }
+
+        console.log('[Camera] Uploading to Firebase Storage...');
+        const filename = `${uid}_${Date.now()}.jpg`;
+        const storagePath = `groups/${activeGroupId}/blitz/${roundId}/${filename}`;
+        const storageRef = ref(storage, storagePath);
+
+        const response = await fetch(capturedImage);
+        const blob = await response.blob();
+        
+        console.log('[Camera] Uploading blob to:', storagePath);
+        await uploadBytes(storageRef, blob);
+        
+        console.log('[Camera] Upload complete, getting download URL...');
+        const downloadURL = await getDownloadURL(storageRef);
+        
+        console.log('[Camera] Writing to Firestore posts collection...');
+        const postId = `${uid}_${Date.now()}`;
+        await setDoc(doc(db, 'groups', activeGroupId, 'posts', postId), {
+          createdBy: uid,
+          createdAt: Timestamp.now(),
+          photoPath: storagePath,
+          roundId: roundId,
+        });
+
+        console.log('[Camera] Blitz post created:', postId);
+        addBlitzPhoto(downloadURL, textOverlay);
       } else {
         addTodayPhoto(capturedImage, textOverlay);
       }
@@ -146,12 +181,12 @@ export default function CameraScreen() {
       setTimeout(() => {
         router.back();
       }, 100);
-    } catch (error) {
+    } catch (error: any) {
       console.error('[Camera] Post failed:', error);
       setPostState('error');
-      setPostError(`Post failed: ${error}`);
+      setPostError(`Post failed: ${error.message || error}`);
     }
-  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz, activeUserId, hasPostedToday, hasPostedBlitz, router, uid]);
+  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz, activeUserId, hasPostedToday, hasPostedBlitz, router, uid, currentBlitzRound]);
 
   const handleClose = useCallback(() => {
     router.back();
@@ -285,8 +320,11 @@ export default function CameraScreen() {
                       )}
                     </View>
                     <View style={styles.postBannerInfo}>
-                      <Text style={styles.postBannerSmall}>Target: {mode === 'blitz' ? 'Blitz' : 'Today'}</Text>
+                      <Text style={styles.postBannerSmall}>Target: {mode === 'blitz' ? 'Blitz (Firebase)' : 'Today'}</Text>
                       <Text style={styles.postBannerSmall}>Group: {mode === 'blitz' ? activeGroupIdBlitz : activeGroupIdToday}</Text>
+                      {mode === 'blitz' && (
+                        <Text style={styles.postBannerSmall}>Round: {currentBlitzRound?.roundId?.slice(0, 8) || 'none'}</Text>
+                      )}
                     </View>
                   </View>
                 )}

@@ -38,6 +38,13 @@ function RootLayoutNav() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="join"
+        options={{
+          presentation: "modal",
+          headerShown: false,
+        }}
+      />
       <Stack.Screen name="+not-found" options={{ title: "Not Found" }} />
     </Stack>
   );

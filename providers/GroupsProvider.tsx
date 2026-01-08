@@ -1,13 +1,13 @@
 import createContextHook from '@nkzw/create-context-hook';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
+import * as Linking from 'expo-linking';
 import { 
   collection, 
-  getDocs, 
   doc, 
   setDoc, 
   getDoc,
-  serverTimestamp,
+  Timestamp,
   addDoc,
   deleteDoc,
 } from 'firebase/firestore';
@@ -61,7 +61,7 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
       const groupRef = await addDoc(collection(db, 'groups'), {
         name,
         createdBy: uid,
-        createdAt: serverTimestamp(),
+        createdAt: Timestamp.now(),
       });
 
       const groupId = groupRef.id;
@@ -69,7 +69,7 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
       await setDoc(doc(db, 'groups', groupId, 'members', uid), {
         role: 'admin',
-        joinedAt: serverTimestamp(),
+        joinedAt: Timestamp.now(),
       });
 
       console.log('[Groups] Admin membership created');
@@ -108,7 +108,7 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
       console.log('[Groups] Adding member to group:', groupId, memberUid);
       await setDoc(doc(db, 'groups', groupId, 'members', memberUid), {
         role: 'member',
-        joinedAt: serverTimestamp(),
+        joinedAt: Timestamp.now(),
       }, { merge: true });
 
       return { success: true };
@@ -135,69 +135,85 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
     }
   };
 
-  const generateInviteLink = async (groupId: string): Promise<{ success: boolean; inviteLink?: string; error?: string }> => {
+  const generateInviteLink = async (groupId: string): Promise<{ success: boolean; inviteLink?: string; code?: string; error?: string }> => {
     if (!uid) {
       return { success: false, error: 'Not logged in' };
     }
 
     try {
       const code = generateInviteCode();
-      console.log('[Groups] Generating invite code:', code);
+      console.log('[Groups] Generating invite code:', code, 'for group:', groupId);
 
-      await setDoc(doc(db, 'groups', groupId, 'invites', code), {
+      await setDoc(doc(db, 'groups', groupId, 'inviteLinks', code), {
+        groupId,
         createdBy: uid,
-        createdAt: serverTimestamp(),
-        status: 'pending',
+        createdAt: Timestamp.now(),
+        active: true,
       });
 
-      const appUrl = process.env.EXPO_PUBLIC_APP_URL || 'https://tapin.app';
-      const inviteLink = `${appUrl}/join?code=${code}`;
+      const inviteLink = Linking.createURL('join', { 
+        queryParams: { groupId, code } 
+      });
 
-      return { success: true, inviteLink };
-    } catch (err) {
+      console.log('[Groups] Invite link created:', inviteLink);
+      return { success: true, inviteLink, code };
+    } catch (err: any) {
       console.error('[Groups] Error generating invite:', err);
-      return { success: false, error: 'Failed to generate invite' };
+      return { success: false, error: err.message || 'Failed to generate invite' };
     }
   };
 
-  const joinGroupByCode = async (code: string): Promise<{ success: boolean; groupId?: string; error?: string }> => {
+  const joinGroupByCode = async (groupId: string, code: string): Promise<{ success: boolean; groupId?: string; error?: string }> => {
     if (!uid) {
       return { success: false, error: 'Not logged in' };
     }
 
     try {
-      console.log('[Groups] Joining group with code:', code);
-      const groupsSnap = await getDocs(collection(db, 'groups'));
-      let inviteDoc: any = null;
-      let groupId: string | null = null;
-
-      for (const gDoc of groupsSnap.docs) {
-        const invDoc = await getDoc(doc(db, 'groups', gDoc.id, 'invites', code));
-        if (invDoc.exists()) {
-          inviteDoc = invDoc;
-          groupId = gDoc.id;
-          break;
-        }
-      }
-
-      if (!inviteDoc || !groupId) {
-        return { success: false, error: 'Invalid invite code' };
+      console.log('[Groups] Joining group:', groupId, 'with code:', code);
+      
+      const inviteDoc = await getDoc(doc(db, 'groups', groupId, 'inviteLinks', code));
+      
+      if (!inviteDoc.exists()) {
+        return { success: false, error: 'Invalid invite link' };
       }
 
       const inviteData = inviteDoc.data();
-      if (inviteData.status !== 'approved') {
-        return { success: false, error: 'Invite must be approved by admin first' };
+      if (!inviteData.active) {
+        return { success: false, error: 'Invite link is no longer active' };
       }
 
       await setDoc(doc(db, 'groups', groupId, 'members', uid), {
         role: 'member',
-        joinedAt: serverTimestamp(),
+        joinedAt: Timestamp.now(),
       }, { merge: true });
 
+      console.log('[Groups] Successfully joined group:', groupId);
+      
+      const groupDoc = await getDoc(doc(db, 'groups', groupId));
+      if (groupDoc.exists()) {
+        const groupData = groupDoc.data();
+        const newGroup: GroupData = {
+          groupId,
+          name: groupData.name,
+          emoji: groupData.emoji,
+          createdBy: groupData.createdBy,
+          members: [{
+            uid,
+            email: 'you',
+            role: 'member',
+          }],
+        };
+        setGroups(prev => {
+          const exists = prev.find(g => g.groupId === groupId);
+          if (exists) return prev;
+          return [...prev, newGroup];
+        });
+      }
+
       return { success: true, groupId };
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Groups] Error joining group:', err);
-      return { success: false, error: 'Failed to join group' };
+      return { success: false, error: err.message || 'Failed to join group' };
     }
   };
 
