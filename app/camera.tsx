@@ -17,10 +17,10 @@ import { useGroups } from '@/providers/GroupsProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { TextOverlay } from '@/types';
 import Colors from '@/constants/colors';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage, db } from '@/lib/firebase';
+import { db } from '@/lib/firebase';
 import { doc, setDoc, Timestamp, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 import { getRandomPrompt } from '@/constants/blitz-prompts';
+import { buildPhotoStoragePath, uploadPhotoToStorage, getTodayCycleId } from '@/lib/uploadPhoto';
 
 const TEXT_SIZES: ('S' | 'M' | 'L')[] = ['S', 'M', 'L'];
 const TEXT_COLORS = ['#FFFFFF', '#000000', '#FF6B6B', '#4ECDC4', '#FFD93D', '#A78BFA'];
@@ -163,19 +163,16 @@ export default function CameraScreen() {
           console.log('[Camera] Using existing round:', roundId.slice(0, 8));
         }
 
-        console.log('[Camera] Uploading to Firebase Storage...');
-        const filename = `${uid}_${Date.now()}.jpg`;
-        const storagePath = `groups/${activeGroupId}/blitz/${roundId}/${filename}`;
-        const storageRef = ref(storage, storagePath);
-
-        const response = await fetch(capturedImage);
-        const blob = await response.blob();
+        console.log('[Camera] Building storage path...');
+        const storagePath = buildPhotoStoragePath({
+          groupId: activeGroupId,
+          uid,
+          mode: 'blitz',
+          roundId,
+        });
         
-        console.log('[Camera] Uploading blob to:', storagePath);
-        await uploadBytes(storageRef, blob);
-        
-        console.log('[Camera] Upload complete, getting download URL...');
-        const downloadURL = await getDownloadURL(storageRef);
+        console.log('[Camera] UploadPath:', storagePath);
+        const downloadURL = await uploadPhotoToStorage(capturedImage, storagePath);
         
         console.log('[Camera] Writing to Firestore posts collection...');
         const postId = `${uid}_${Date.now()}`;
@@ -189,7 +186,31 @@ export default function CameraScreen() {
         console.log('[Camera] Blitz post created:', postId);
         addBlitzPhoto(downloadURL, textOverlay);
       } else {
-        addTodayPhoto(capturedImage, textOverlay);
+        console.log('[Camera] Today mode: preparing upload...');
+        const cycleId = getTodayCycleId();
+        
+        console.log('[Camera] Building storage path...');
+        const storagePath = buildPhotoStoragePath({
+          groupId: activeGroupId,
+          uid,
+          mode: 'today',
+          cycleId,
+        });
+        
+        console.log('[Camera] UploadPath:', storagePath);
+        const downloadURL = await uploadPhotoToStorage(capturedImage, storagePath);
+        
+        console.log('[Camera] Writing to Firestore posts collection (Today)...');
+        const postId = `${uid}_${Date.now()}`;
+        await setDoc(doc(db, 'groups', activeGroupId, 'posts', postId), {
+          createdBy: uid,
+          createdAt: Timestamp.now(),
+          photoPath: storagePath,
+          roundId: `today_${cycleId}`,
+        });
+        
+        console.log('[Camera] Today post created:', postId);
+        addTodayPhoto(downloadURL, textOverlay);
       }
 
       await new Promise(resolve => setTimeout(resolve, 300));
