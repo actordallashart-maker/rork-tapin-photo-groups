@@ -11,8 +11,10 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Users, Plus, X } from 'lucide-react-native';
+import { Users, Plus, X, LogIn, LogOut } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
+import { useAuth } from '@/providers/AuthProvider';
+import AuthModal from '@/components/AuthModal';
 import Colors from '@/constants/colors';
 
 const EMOJI_OPTIONS = ['👯', '👨‍👩‍👧‍👦', '💼', '🎉', '🏠', '🎮', '🏋️', '📚', '🎸', '✈️'];
@@ -20,12 +22,19 @@ const EMOJI_OPTIONS = ['👯', '👨‍👩‍👧‍👦', '💼', '🎉', '�
 export default function GroupsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { groups, addGroup } = useAppData();
+  const { groups, addGroup, activeUserId } = useAppData();
+  const { uid, email, signOut } = useAuth();
   const [isCreating, setIsCreating] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
   const [selectedEmoji, setSelectedEmoji] = useState(EMOJI_OPTIONS[0]);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
 
   const handleCreateGroup = useCallback(() => {
+    if (!uid) {
+      setShowAuthModal(true);
+      return;
+    }
     if (!newGroupName.trim()) {
       if (Platform.OS === 'web') {
         alert('Please enter a group name');
@@ -39,7 +48,25 @@ export default function GroupsScreen() {
     setNewGroupName('');
     setSelectedEmoji(EMOJI_OPTIONS[0]);
     setIsCreating(false);
-  }, [newGroupName, selectedEmoji, addGroup]);
+  }, [newGroupName, selectedEmoji, addGroup, uid]);
+
+  const handleSignOut = useCallback(async () => {
+    const confirmSignOut = () => {
+      signOut();
+      setShowAccountMenu(false);
+    };
+    
+    if (Platform.OS === 'web') {
+      if (window.confirm('Are you sure you want to log out?')) {
+        confirmSignOut();
+      }
+    } else {
+      Alert.alert('Log out', 'Are you sure you want to log out?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Log out', style: 'destructive', onPress: confirmSignOut },
+      ]);
+    }
+  }, [signOut]);
 
   const handleCancel = useCallback(() => {
     setNewGroupName('');
@@ -55,8 +82,46 @@ export default function GroupsScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Groups</Text>
-          <Text style={styles.subtitle}>Manage your groups</Text>
+          <View style={styles.headerTop}>
+            <View>
+              <Text style={styles.title}>Groups</Text>
+              <Text style={styles.subtitle}>Manage your groups</Text>
+            </View>
+            {uid ? (
+              <TouchableOpacity 
+                style={styles.authButton}
+                onPress={() => setShowAccountMenu(!showAccountMenu)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.userAvatar}>
+                  <Text style={styles.userAvatarText}>{email?.[0]?.toUpperCase() || 'U'}</Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity 
+                style={styles.loginButton}
+                onPress={() => setShowAuthModal(true)}
+                activeOpacity={0.8}
+              >
+                <LogIn size={20} color="white" />
+                <Text style={styles.loginButtonText}>Log in</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          {showAccountMenu && uid && (
+            <View style={styles.accountMenu}>
+              <Text style={styles.accountEmail}>{email}</Text>
+              <Text style={styles.accountUserId}>User ID: {activeUserId.slice(0, 8)}...</Text>
+              <TouchableOpacity 
+                style={styles.logoutButton}
+                onPress={handleSignOut}
+                activeOpacity={0.7}
+              >
+                <LogOut size={18} color="#FF6B6B" />
+                <Text style={styles.logoutButtonText}>Log out</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
         {isCreating && (
@@ -164,6 +229,7 @@ export default function GroupsScreen() {
           </View>
         )}
       </ScrollView>
+      <AuthModal visible={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </View>
   );
 }
@@ -183,6 +249,68 @@ const styles = StyleSheet.create({
   header: {
     marginTop: 12,
     marginBottom: 24,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  authButton: {
+    padding: 4,
+  },
+  userAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.dark.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700' as const,
+  },
+  loginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.accent,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 6,
+  },
+  loginButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  accountMenu: {
+    backgroundColor: Colors.dark.surfaceLight,
+    borderRadius: 12,
+    padding: 16,
+    gap: 12,
+  },
+  accountEmail: {
+    color: Colors.dark.text,
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  accountUserId: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  logoutButtonText: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
   title: {
     fontSize: 36,

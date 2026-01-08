@@ -4,12 +4,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useCallback, useMemo } from 'react';
 import { Group, TodayPhoto, BlitzRound, BlitzPhoto, AppData, TextOverlay } from '@/types';
 import { getRandomPrompt } from '@/constants/blitz-prompts';
+import { useAuth } from '@/providers/AuthProvider';
 
 const STORAGE_KEY_MAIN = 'tapin_app_data';
 const STORAGE_KEY_TODAY = 'tapin_photos_today_v1';
 const STORAGE_KEY_BLITZ = 'tapin_photos_blitz_v1';
 const STORAGE_KEY_ROUNDS = 'tapin_blitz_round_state_v1';
-const STORAGE_KEY_USER_ID = 'tapin_active_user_id';
 const STORAGE_KEY_TODAY_CYCLE = 'tapin_today_cycle_state_v1';
 
 
@@ -50,21 +50,18 @@ const getTodayCycleEnd = (): string => {
 
 export const [AppDataProvider, useAppData] = createContextHook(() => {
   const queryClient = useQueryClient();
+  const { uid } = useAuth();
   const [activeGroupIdToday, setActiveGroupIdToday] = useState<string>('group-a');
   const [activeGroupIdBlitz, setActiveGroupIdBlitz] = useState<string>('group-a');
-  const [activeUserId, setActiveUserId] = useState<string>('');
   const [isHydrated, setIsHydrated] = useState(false);
   const [lastUpdateSource, setLastUpdateSource] = useState<'optimistic' | 'merge' | 'hydrate' | 'remote'>('hydrate');
+
+  const activeUserId = uid || '';
 
   const dataQuery = useQuery({
     queryKey: ['appData'],
     queryFn: async (): Promise<AppData> => {
       console.log('[AppData] Loading from AsyncStorage...');
-      
-      const userId = await AsyncStorage.getItem(STORAGE_KEY_USER_ID);
-      if (userId) {
-        setActiveUserId(userId);
-      }
       
       const stored = await AsyncStorage.getItem(STORAGE_KEY_MAIN);
       if (stored) {
@@ -180,6 +177,11 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
       const createdAt = now.toISOString();
       const photoId = generateStableId(activeGroupIdToday, 'today', activeUserId);
       
+      if (!activeUserId) {
+        console.error('[AppData] Cannot add photo: user not logged in');
+        return;
+      }
+
       const newPhoto: TodayPhoto = {
         photoId,
         groupId: activeGroupIdToday,
@@ -251,6 +253,11 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
     (imageUri: string, textOverlay?: TextOverlay) => {
       if (!data) {
         console.error('[AppData] Cannot add photo: no data');
+        return;
+      }
+
+      if (!activeUserId) {
+        console.error('[AppData] Cannot add photo: user not logged in');
         return;
       }
       
@@ -352,11 +359,9 @@ export const [AppDataProvider, useAppData] = createContextHook(() => {
       STORAGE_KEY_TODAY,
       STORAGE_KEY_BLITZ,
       STORAGE_KEY_ROUNDS,
-      STORAGE_KEY_USER_ID,
       STORAGE_KEY_TODAY_CYCLE,
     ]);
     
-    setActiveUserId('');
     console.log('[AppData] All local data cleared - auth required for new session');
     
     const emptyData: AppData = {

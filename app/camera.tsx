@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { X, RotateCcw, Type, Check, AlertCircle } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
+import { useAuth } from '@/providers/AuthProvider';
 import { TextOverlay } from '@/types';
 import Colors from '@/constants/colors';
 
@@ -34,6 +35,7 @@ export default function CameraScreen() {
     hasPostedToday,
     hasPostedBlitz,
   } = useAppData();
+  const { uid } = useAuth();
   const cameraRef = useRef<CameraView>(null);
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -94,6 +96,13 @@ export default function CameraScreen() {
       return;
     }
 
+    if (!uid) {
+      console.error('[Camera] User not logged in');
+      setPostState('error');
+      setPostError('Log in to post');
+      return;
+    }
+
     if (!activeUserId) {
       console.error('[Camera] Missing activeUserId');
       setPostState('error');
@@ -142,7 +151,7 @@ export default function CameraScreen() {
       setPostState('error');
       setPostError(`Post failed: ${error}`);
     }
-  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz, activeUserId, hasPostedToday, hasPostedBlitz, router]);
+  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz, activeUserId, hasPostedToday, hasPostedBlitz, router, uid]);
 
   const handleClose = useCallback(() => {
     router.back();
