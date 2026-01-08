@@ -122,7 +122,6 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
       console.log('[Groups] Creating group:', name);
       const groupRef = await addDoc(collection(db, 'groups'), {
         name,
-        emoji,
         createdBy: uid,
         createdAt: serverTimestamp(),
       });
