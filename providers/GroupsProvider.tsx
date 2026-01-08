@@ -8,7 +8,6 @@ import {
   setDoc, 
   getDoc,
   serverTimestamp,
-  onSnapshot,
   addDoc,
   deleteDoc,
 } from 'firebase/firestore';
@@ -45,72 +44,11 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
       return;
     }
 
-    console.log('[Groups] Setting up groups listener for:', uid);
-    setIsLoading(true);
-
-    const loadGroups = async () => {
-      try {
-        const allGroupsSnap = await getDocs(collection(db, 'groups'));
-        const myGroups: GroupData[] = [];
-
-        for (const groupDoc of allGroupsSnap.docs) {
-          const groupId = groupDoc.id;
-          const groupData = groupDoc.data();
-
-          const memberDoc = await getDoc(
-            doc(db, 'groups', groupId, 'members', uid)
-          );
-
-          if (!memberDoc.exists()) continue;
-
-          const membersSnap = await getDocs(
-            collection(db, 'groups', groupId, 'members')
-          );
-
-          const members = await Promise.all(
-            membersSnap.docs.map(async (memberDoc): Promise<GroupMemberData | null> => {
-              const memberData = memberDoc.data();
-              const memberUid = memberDoc.id;
-              const userDoc = await getDoc(doc(db, 'users', memberUid));
-              if (!userDoc.exists()) return null;
-
-              const userData = userDoc.data();
-              return {
-                uid: memberUid,
-                email: userData.email || memberUid,
-                username: userData.displayName,
-                role: memberData.role as 'owner' | 'member',
-              } as GroupMemberData;
-            })
-          );
-
-          myGroups.push({
-            groupId,
-            name: groupData.name,
-            emoji: groupData.emoji,
-            createdBy: groupData.createdBy,
-            members: members.filter((m): m is GroupMemberData => m !== null),
-          });
-        }
-
-        console.log('[Groups] Loaded groups:', myGroups.length);
-        setGroups(myGroups);
-        setIsLoading(false);
-      } catch (err) {
-        console.error('[Groups] Error loading groups:', err);
-        setError('Failed to load groups');
-        setIsLoading(false);
-      }
-    };
-
-    loadGroups();
-
-    const groupsRef = collection(db, 'groups');
-    const unsubscribe = onSnapshot(groupsRef, () => {
-      loadGroups();
-    });
-
-    return unsubscribe;
+    console.log('[Groups] Note: Cannot auto-load groups due to security rules.');
+    console.log('[Groups] Security rules require knowing specific groupId to read.');
+    console.log('[Groups] Groups will only load after joining via invite code.');
+    setIsLoading(false);
+    setError('Cannot list groups - join via invite code instead');
   }, [uid]);
 
   const createGroup = async (name: string, emoji?: string): Promise<{ success: boolean; groupId?: string; error?: string }> => {
@@ -127,17 +65,37 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
       });
 
       const groupId = groupRef.id;
+      console.log('[Groups] Group doc created:', groupId);
 
       await setDoc(doc(db, 'groups', groupId, 'members', uid), {
         role: 'admin',
         joinedAt: serverTimestamp(),
       });
 
-      console.log('[Groups] Group created:', groupId);
+      console.log('[Groups] Admin membership created');
+
+      const groupDoc = await getDoc(doc(db, 'groups', groupId));
+      if (groupDoc.exists()) {
+        const groupData = groupDoc.data();
+        const newGroup: GroupData = {
+          groupId,
+          name: groupData.name,
+          emoji: groupData.emoji,
+          createdBy: groupData.createdBy,
+          members: [{
+            uid,
+            email: 'you',
+            role: 'owner',
+          }],
+        };
+        setGroups(prev => [...prev, newGroup]);
+        setError(null);
+      }
+
       return { success: true, groupId };
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Groups] Error creating group:', err);
-      return { success: false, error: 'Failed to create group' };
+      return { success: false, error: err.message || 'Failed to create group' };
     }
   };
 

@@ -7,7 +7,7 @@ import {
   signOut as firebaseSignOut,
   User 
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -23,16 +23,19 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       
       if (firebaseUser) {
         try {
-          await setDoc(
-            doc(db, 'users', firebaseUser.uid), 
-            {
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          
+          if (!userDocSnap.exists()) {
+            await setDoc(userDocRef, {
               displayName: firebaseUser.displayName || '',
               photoURL: firebaseUser.photoURL || '',
               createdAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
-          console.log('[Auth] User doc synced:', firebaseUser.uid);
+            });
+            console.log('[Auth] User doc created:', firebaseUser.uid);
+          } else {
+            console.log('[Auth] User doc exists:', firebaseUser.uid);
+          }
         } catch (error) {
           console.error('[Auth] Error syncing user doc:', error);
         }
@@ -51,8 +54,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       
       await setDoc(doc(db, 'users', result.user.uid), {
-        displayName: result.user.displayName || '',
-        photoURL: result.user.photoURL || '',
+        displayName: '',
+        photoURL: '',
         createdAt: serverTimestamp(),
       });
       
