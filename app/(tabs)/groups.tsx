@@ -26,7 +26,7 @@ export default function GroupsScreen() {
   const insets = useSafeAreaInsets();
   const { activeUserId } = useAppData();
   const { uid, email, signOut } = useAuth();
-  const { groups, createGroup } = useGroups();
+  const { groups, createGroup, lastCreateGroupError, createGroupStep } = useGroups();
   const { friendCount } = useSocial();
   const [isCreating, setIsCreating] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -99,9 +99,19 @@ export default function GroupsScreen() {
               <Text style={styles.title}>Groups</Text>
               <Text style={styles.subtitle}>Manage your groups</Text>
               {uid && (
-                <Text style={styles.debugText}>
-                  Source: firestore | Groups: {groups.length} | Friends: {friendCount}
-                </Text>
+                <>
+                  <Text style={styles.debugText}>
+                    Source: firestore | Groups: {groups.length} | Friends: {friendCount}
+                  </Text>
+                  <Text style={[styles.debugText, lastCreateGroupError && styles.errorText]}>
+                    CreateGroup: {createGroupStep || 'idle'}
+                  </Text>
+                  {lastCreateGroupError && (
+                    <Text style={styles.errorText}>
+                      ERROR: {lastCreateGroupError}
+                    </Text>
+                  )}
+                </>
               )}
             </View>
             {uid ? (
@@ -487,6 +497,11 @@ const styles = StyleSheet.create({
   },
   debugText: {
     color: Colors.dark.textSecondary,
+    fontSize: 11,
+    marginTop: 4,
+  },
+  errorText: {
+    color: '#FF6B6B',
     fontSize: 11,
     marginTop: 4,
   },

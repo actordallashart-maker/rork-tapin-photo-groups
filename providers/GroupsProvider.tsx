@@ -37,6 +37,8 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
   const [groups, setGroups] = useState<GroupData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastCreateGroupError, setLastCreateGroupError] = useState<string | null>(null);
+  const [createGroupStep, setCreateGroupStep] = useState<string>('');
 
   useEffect(() => {
     if (!uid) {
@@ -53,11 +55,15 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
   const createGroup = async (name: string, emoji?: string): Promise<{ success: boolean; groupId?: string; error?: string }> => {
     if (!uid) {
+      setLastCreateGroupError('Not logged in');
+      setCreateGroupStep('error: not logged in');
       return { success: false, error: 'Not logged in' };
     }
 
     try {
-      console.log('[Groups] Creating group:', name);
+      setCreateGroupStep('creating group doc...');
+      console.log('[Groups] Step 1: Creating group doc:', name);
+      
       const groupRef = await addDoc(collection(db, 'groups'), {
         name,
         createdBy: uid,
@@ -65,14 +71,19 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
       });
 
       const groupId = groupRef.id;
-      console.log('[Groups] Group doc created:', groupId);
+      setCreateGroupStep(`groupWritten (${groupId.slice(0, 8)})`);
+      console.log('[Groups] Step 2: Group doc created:', groupId);
 
+      setCreateGroupStep('creating membership...');
+      console.log('[Groups] Step 3: Creating admin membership for uid:', uid);
+      
       await setDoc(doc(db, 'groups', groupId, 'members', uid), {
         role: 'admin',
         joinedAt: Timestamp.now(),
       });
 
-      console.log('[Groups] Admin membership created');
+      setCreateGroupStep('memberWritten');
+      console.log('[Groups] Step 4: Admin membership created');
 
       const groupDoc = await getDoc(doc(db, 'groups', groupId));
       if (groupDoc.exists()) {
@@ -90,12 +101,17 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
         };
         setGroups(prev => [...prev, newGroup]);
         setError(null);
+        setLastCreateGroupError(null);
       }
 
+      setCreateGroupStep('OK');
       return { success: true, groupId };
     } catch (err: any) {
+      const errorMsg = err.message || 'Failed to create group';
       console.error('[Groups] Error creating group:', err);
-      return { success: false, error: err.message || 'Failed to create group' };
+      setLastCreateGroupError(errorMsg);
+      setCreateGroupStep(`error: ${errorMsg}`);
+      return { success: false, error: errorMsg };
     }
   };
 
@@ -225,6 +241,8 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
     groups,
     isLoading,
     error,
+    lastCreateGroupError,
+    createGroupStep,
     createGroup,
     addMemberToGroup,
     removeMemberFromGroup,
