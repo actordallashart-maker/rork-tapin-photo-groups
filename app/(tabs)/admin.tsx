@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,12 +10,15 @@ import {
   RefreshCw,
 } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
+import { useGroups } from '@/providers/GroupsProvider';
 import Colors from '@/constants/colors';
 import { useRouter } from 'expo-router';
 
 export default function AdminScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { groups: firestoreGroups, getPendingInvites, approveInvite, declineInvite } = useGroups();
+  const [pendingInvites, setPendingInvites] = useState<{ groupId: string; groupName: string; inviteId: string; createdBy: string; createdAt: string }[]>([]);
   const {
     clearAllData,
     resetToFirstLaunch,
@@ -38,6 +41,51 @@ export default function AdminScreen() {
       Alert.alert(title, message);
     }
   }, []);
+
+  const loadPendingInvites = useCallback(async () => {
+    const allInvites = [];
+    
+    for (const group of firestoreGroups) {
+      const invites = await getPendingInvites(group.groupId);
+      for (const invite of invites) {
+        allInvites.push({
+          groupId: group.groupId,
+          groupName: group.name,
+          inviteId: invite.inviteId,
+          createdBy: invite.createdBy,
+          createdAt: invite.createdAt,
+        });
+      }
+    }
+    
+    setPendingInvites(allInvites);
+  }, [firestoreGroups, getPendingInvites]);
+
+  useEffect(() => {
+    loadPendingInvites();
+  }, [loadPendingInvites]);
+
+  const handleApproveInvite = useCallback(async (groupId: string, inviteeUid: string) => {
+    console.log('[Admin] Approving invite:', groupId, inviteeUid);
+    const result = await approveInvite(groupId, inviteeUid);
+    if (result.success) {
+      showAlert('Success', 'Invite approved');
+      loadPendingInvites();
+    } else {
+      showAlert('Error', result.error || 'Failed to approve invite');
+    }
+  }, [approveInvite, showAlert, loadPendingInvites]);
+
+  const handleDeclineInvite = useCallback(async (groupId: string, inviteeUid: string) => {
+    console.log('[Admin] Declining invite:', groupId, inviteeUid);
+    const result = await declineInvite(groupId, inviteeUid);
+    if (result.success) {
+      showAlert('Success', 'Invite declined');
+      loadPendingInvites();
+    } else {
+      showAlert('Error', result.error || 'Failed to decline invite');
+    }
+  }, [declineInvite, showAlert, loadPendingInvites]);
 
 
 
@@ -173,6 +221,37 @@ export default function AdminScreen() {
             <Text style={styles.infoValue}>{currentBlitzRound?.status ?? 'None'}</Text>
           </View>
         </View>
+
+        {pendingInvites.length > 0 && (
+          <View style={styles.invitesSection}>
+            <Text style={styles.sectionTitle}>Pending Invites ({pendingInvites.length})</Text>
+            {pendingInvites.map((invite) => (
+              <View key={`${invite.groupId}_${invite.inviteId}`} style={styles.inviteItem}>
+                <View style={styles.inviteInfo}>
+                  <Text style={styles.inviteGroupName}>{invite.groupName}</Text>
+                  <Text style={styles.inviteUser}>User: {invite.inviteId.slice(0, 8)}...</Text>
+                  <Text style={styles.inviteTime}>{new Date(invite.createdAt).toLocaleString()}</Text>
+                </View>
+                <View style={styles.inviteActions}>
+                  <TouchableOpacity
+                    style={styles.approveButton}
+                    onPress={() => handleApproveInvite(invite.groupId, invite.inviteId)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.approveButtonText}>Approve</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.declineButton}
+                    onPress={() => handleDeclineInvite(invite.groupId, invite.inviteId)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.declineButtonText}>Decline</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.sectionTitle}>Actions</Text>
 
@@ -446,6 +525,62 @@ const styles = StyleSheet.create({
   },
   confirmButtonText: {
     color: Colors.dark.text,
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  invitesSection: {
+    marginBottom: 24,
+  },
+  inviteItem: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  inviteInfo: {
+    flex: 1,
+  },
+  inviteGroupName: {
+    color: Colors.dark.text,
+    fontSize: 16,
+    fontWeight: '600' as const,
+    marginBottom: 4,
+  },
+  inviteUser: {
+    color: Colors.dark.textSecondary,
+    fontSize: 14,
+    marginBottom: 2,
+  },
+  inviteTime: {
+    color: Colors.dark.textSecondary,
+    fontSize: 12,
+  },
+  inviteActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  approveButton: {
+    backgroundColor: Colors.dark.accent,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  approveButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  declineButton: {
+    backgroundColor: Colors.dark.surfaceLight,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  declineButtonText: {
+    color: Colors.dark.textSecondary,
     fontSize: 14,
     fontWeight: '600' as const,
   },

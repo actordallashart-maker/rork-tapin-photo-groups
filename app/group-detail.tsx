@@ -170,13 +170,13 @@ export default function GroupDetailScreen() {
                   ]}
                 >
                   <Text style={styles.memberInitials}>
-                    {member.username?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
+                    {member.displayName?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
                   </Text>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.memberName}>{member.username || member.email}</Text>
-                  {member.role === 'owner' && (
-                    <Text style={styles.memberRole}>Owner</Text>
+                  <Text style={styles.memberName}>{member.displayName || member.email}</Text>
+                  {member.role === 'admin' && (
+                    <Text style={styles.memberRole}>Admin</Text>
                   )}
                 </View>
                 {member.uid !== uid && (

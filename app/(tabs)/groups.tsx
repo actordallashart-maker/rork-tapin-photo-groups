@@ -230,7 +230,7 @@ export default function GroupsScreen() {
                     ]}
                   >
                     <Text style={styles.memberInitials}>
-                      {member.username?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
+                      {member.displayName?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
                     </Text>
                   </View>
                 ))}

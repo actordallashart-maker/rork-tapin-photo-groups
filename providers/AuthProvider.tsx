@@ -7,7 +7,7 @@ import {
   signOut as firebaseSignOut,
   User 
 } from 'firebase/auth';
-import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
@@ -30,7 +30,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
             await setDoc(userDocRef, {
               displayName: firebaseUser.displayName || '',
               photoURL: firebaseUser.photoURL || '',
-              createdAt: serverTimestamp(),
+              createdAt: Timestamp.now(),
             });
             console.log('[Auth] User doc created:', firebaseUser.uid);
           } else {
@@ -56,7 +56,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       await setDoc(doc(db, 'users', result.user.uid), {
         displayName: '',
         photoURL: '',
-        createdAt: serverTimestamp(),
+        createdAt: Timestamp.now(),
       });
       
       console.log('[Auth] Account created:', result.user.uid);

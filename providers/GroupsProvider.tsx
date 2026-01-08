@@ -25,8 +25,10 @@ const STORAGE_KEY_ACTIVE_GROUP = 'tapin_active_group_id';
 export interface GroupMemberData {
   uid: string;
   email: string;
-  username?: string;
-  role: 'owner' | 'member';
+  displayName?: string;
+  photoURL?: string;
+  role: 'admin' | 'member';
+  joinedAt: string;
 }
 
 export interface GroupData {
@@ -83,12 +85,31 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
           
           if (groupSnap.exists()) {
             const groupData = groupSnap.data();
+            
+            const membersSnapshot = await getDocs(collection(db, 'groups', groupId, 'members'));
+            const members: GroupMemberData[] = [];
+            
+            for (const memberDoc of membersSnapshot.docs) {
+              const memberData = memberDoc.data();
+              const userDoc = await getDoc(doc(db, 'users', memberDoc.id));
+              const userData = userDoc.exists() ? userDoc.data() : {};
+              
+              members.push({
+                uid: memberDoc.id,
+                email: userData.email || memberDoc.id,
+                displayName: userData.displayName || '',
+                photoURL: userData.photoURL || '',
+                role: memberData.role || 'member',
+                joinedAt: memberData.joinedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+              });
+            }
+            
             groupDataList.push({
               groupId,
               name: groupData.name,
               emoji: groupData.emoji,
               createdBy: groupData.createdBy,
-              members: [{ uid, email: 'you', role: memberDoc.data().role }],
+              members,
             });
           }
         }
@@ -158,7 +179,10 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
           members: [{
             uid,
             email: 'you',
-            role: 'owner',
+            displayName: '',
+            photoURL: '',
+            role: 'admin',
+            joinedAt: new Date().toISOString(),
           }],
         };
         setGroups(prev => [...prev, newGroup]);
@@ -316,7 +340,10 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
           members: [{
             uid,
             email: 'you',
+            displayName: '',
+            photoURL: '',
             role: 'member',
+            joinedAt: new Date().toISOString(),
           }],
         };
         setGroups(prev => {
@@ -338,6 +365,66 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
   const getGroup = (groupId: string): GroupData | undefined => {
     return groups.find((g) => g.groupId === groupId);
+  };
+
+  const getPendingInvites = async (groupId: string): Promise<{ inviteId: string; createdBy: string; createdAt: string; note?: string }[]> => {
+    if (!uid) return [];
+    
+    try {
+      const invitesSnapshot = await getDocs(collection(db, 'groups', groupId, 'invites'));
+      const invites = [];
+      
+      for (const inviteDoc of invitesSnapshot.docs) {
+        const inviteData = inviteDoc.data();
+        if (inviteData.status === 'pending') {
+          invites.push({
+            inviteId: inviteDoc.id,
+            createdBy: inviteData.createdBy,
+            createdAt: inviteData.createdAt?.toDate?.()?.toISOString() || '',
+            note: inviteData.note || '',
+          });
+        }
+      }
+      
+      return invites;
+    } catch (err: any) {
+      console.error('[Groups] Error loading invites:', err);
+      return [];
+    }
+  };
+
+  const approveInvite = async (groupId: string, inviteeUid: string): Promise<{ success: boolean; error?: string }> => {
+    if (!uid) {
+      return { success: false, error: 'Not logged in' };
+    }
+
+    try {
+      console.log('[Groups] Approving invite:', groupId, inviteeUid);
+      await setDoc(doc(db, 'groups', groupId, 'invites', inviteeUid), {
+        status: 'approved',
+      }, { merge: true });
+      
+      return { success: true };
+    } catch (err: any) {
+      console.error('[Groups] Error approving invite:', err);
+      return { success: false, error: err.message || 'Failed to approve invite' };
+    }
+  };
+
+  const declineInvite = async (groupId: string, inviteeUid: string): Promise<{ success: boolean; error?: string }> => {
+    if (!uid) {
+      return { success: false, error: 'Not logged in' };
+    }
+
+    try {
+      console.log('[Groups] Declining invite:', groupId, inviteeUid);
+      await deleteDoc(doc(db, 'groups', groupId, 'invites', inviteeUid));
+      
+      return { success: true };
+    } catch (err: any) {
+      console.error('[Groups] Error declining invite:', err);
+      return { success: false, error: err.message || 'Failed to decline invite' };
+    }
   };
 
   const switchGroup = async (groupId: string) => {
@@ -364,5 +451,8 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
     groupCount: groups.length,
     inviteLinkGenerated,
     inviteDocPath,
+    getPendingInvites,
+    approveInvite,
+    declineInvite,
   };
 });
