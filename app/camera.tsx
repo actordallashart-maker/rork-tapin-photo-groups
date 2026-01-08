@@ -13,12 +13,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { X, RotateCcw, Type, Check, AlertCircle } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
+import { useGroups } from '@/providers/GroupsProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { TextOverlay } from '@/types';
 import Colors from '@/constants/colors';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage, db } from '@/lib/firebase';
-import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, Timestamp, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { getRandomPrompt } from '@/constants/blitz-prompts';
 
 const TEXT_SIZES: ('S' | 'M' | 'L')[] = ['S', 'M', 'L'];
 const TEXT_COLORS = ['#FFFFFF', '#000000', '#FF6B6B', '#4ECDC4', '#FFD93D', '#A78BFA'];
@@ -29,11 +31,10 @@ export default function CameraScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { mode } = useLocalSearchParams<{ mode: 'today' | 'blitz' }>();
+  const { activeGroupId } = useGroups();
   const { 
     addTodayPhoto, 
     addBlitzPhoto, 
-    activeGroupIdToday, 
-    activeGroupIdBlitz,
     activeUserId,
     hasPostedToday,
     hasPostedBlitz,
@@ -92,11 +93,10 @@ export default function CameraScreen() {
       return;
     }
 
-    const activeGroupId = mode === 'blitz' ? activeGroupIdBlitz : activeGroupIdToday;
     if (!activeGroupId) {
       console.error('[Camera] Missing activeGroupId');
       setPostState('error');
-      setPostError('Missing activeGroupId');
+      setPostError('No active group selected');
       return;
     }
 
@@ -133,15 +133,34 @@ export default function CameraScreen() {
       };
     }
 
-    console.log('[Camera] Posting photo, mode:', mode, 'groupId:', activeGroupId);
+    console.log('[Camera] Posting photo, mode:', mode, 'groupId:', activeGroupId.slice(0, 8));
     
     try {
       if (mode === 'blitz') {
-        const roundId = currentBlitzRound?.roundId;
-        if (!roundId) {
-          setPostState('error');
-          setPostError('No active Blitz round');
-          return;
+        console.log('[Camera] Blitz mode: checking for active round...');
+        
+        const roundsQuery = query(
+          collection(db, 'groups', activeGroupId, 'blitzRounds'),
+          where('status', '==', 'active')
+        );
+        const roundsSnapshot = await getDocs(roundsQuery);
+        
+        let roundId: string;
+        
+        if (roundsSnapshot.empty) {
+          console.log('[Camera] No active round found, creating new round...');
+          const newRoundRef = await addDoc(collection(db, 'groups', activeGroupId, 'blitzRounds'), {
+            prompt: getRandomPrompt(),
+            status: 'active',
+            createdAt: Timestamp.now(),
+            startedAt: Timestamp.now(),
+            endsAt: Timestamp.fromMillis(Date.now() + 5 * 60 * 1000),
+          });
+          roundId = newRoundRef.id;
+          console.log('[Camera] Created new round:', roundId.slice(0, 8));
+        } else {
+          roundId = roundsSnapshot.docs[0].id;
+          console.log('[Camera] Using existing round:', roundId.slice(0, 8));
         }
 
         console.log('[Camera] Uploading to Firebase Storage...');
@@ -186,7 +205,7 @@ export default function CameraScreen() {
       setPostState('error');
       setPostError(`Post failed: ${error.message || error}`);
     }
-  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupIdToday, activeGroupIdBlitz, activeUserId, hasPostedToday, hasPostedBlitz, router, uid, currentBlitzRound]);
+  }, [capturedImage, overlayText, textSize, textColor, mode, addTodayPhoto, addBlitzPhoto, activeGroupId, activeUserId, hasPostedToday, hasPostedBlitz, router, uid]);
 
   const handleClose = useCallback(() => {
     router.back();
@@ -321,7 +340,7 @@ export default function CameraScreen() {
                     </View>
                     <View style={styles.postBannerInfo}>
                       <Text style={styles.postBannerSmall}>Target: {mode === 'blitz' ? 'Blitz (Firebase)' : 'Today'}</Text>
-                      <Text style={styles.postBannerSmall}>Group: {mode === 'blitz' ? activeGroupIdBlitz : activeGroupIdToday}</Text>
+                      <Text style={styles.postBannerSmall}>Group: {activeGroupId?.slice(0, 8) || 'none'}</Text>
                       {mode === 'blitz' && (
                         <Text style={styles.postBannerSmall}>Round: {currentBlitzRound?.roundId?.slice(0, 8) || 'none'}</Text>
                       )}

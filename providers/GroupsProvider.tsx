@@ -10,8 +10,17 @@ import {
   Timestamp,
   addDoc,
   deleteDoc,
+  collectionGroup,
+  query,
+  getDocs,
+  documentId,
+  where,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getRandomPrompt } from '@/constants/blitz-prompts';
+
+const STORAGE_KEY_ACTIVE_GROUP = 'tapin_active_group_id';
 
 export interface GroupMemberData {
   uid: string;
@@ -28,29 +37,82 @@ export interface GroupData {
   members: GroupMemberData[];
 }
 
-const generateInviteCode = (): string => {
-  return Math.random().toString(36).substring(2, 10).toUpperCase();
-};
-
 export const [GroupsProvider, useGroups] = createContextHook(() => {
   const { uid } = useAuth();
   const [groups, setGroups] = useState<GroupData[]>([]);
+  const [activeGroupId, setActiveGroupId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastCreateGroupError, setLastCreateGroupError] = useState<string | null>(null);
   const [createGroupStep, setCreateGroupStep] = useState<string>('');
+  const [inviteLinkGenerated, setInviteLinkGenerated] = useState<string>('');
+  const [inviteDocPath, setInviteDocPath] = useState<string>('');
 
   useEffect(() => {
     if (!uid) {
       setGroups([]);
+      setActiveGroupId('');
       return;
     }
 
-    console.log('[Groups] Note: Cannot auto-load groups due to security rules.');
-    console.log('[Groups] Security rules require knowing specific groupId to read.');
-    console.log('[Groups] Groups will only load after joining via invite code.');
-    setIsLoading(false);
-    setError('Cannot list groups - join via invite code instead');
+    const loadGroups = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        console.log('[Groups] Loading groups for uid:', uid.slice(0, 8));
+        
+        const membersQuery = query(
+          collectionGroup(db, 'members'),
+          where(documentId(), '==', uid)
+        );
+        
+        const membersSnapshot = await getDocs(membersQuery);
+        console.log('[Groups] Found memberships:', membersSnapshot.size);
+        
+        const groupIds = new Set<string>();
+        const groupDataList: GroupData[] = [];
+        
+        for (const memberDoc of membersSnapshot.docs) {
+          const groupId = memberDoc.ref.parent.parent?.id;
+          if (!groupId || groupIds.has(groupId)) continue;
+          groupIds.add(groupId);
+          
+          console.log('[Groups] Loading group:', groupId.slice(0, 8));
+          const groupDocRef = doc(db, 'groups', groupId);
+          const groupSnap = await getDoc(groupDocRef);
+          
+          if (groupSnap.exists()) {
+            const groupData = groupSnap.data();
+            groupDataList.push({
+              groupId,
+              name: groupData.name,
+              emoji: groupData.emoji,
+              createdBy: groupData.createdBy,
+              members: [{ uid, email: 'you', role: memberDoc.data().role }],
+            });
+          }
+        }
+        
+        console.log('[Groups] Loaded groups:', groupDataList.length);
+        setGroups(groupDataList);
+        setError(null);
+        
+        const stored = await AsyncStorage.getItem(STORAGE_KEY_ACTIVE_GROUP);
+        if (stored && groupDataList.some(g => g.groupId === stored)) {
+          setActiveGroupId(stored);
+        } else if (groupDataList.length > 0) {
+          setActiveGroupId(groupDataList[0].groupId);
+          await AsyncStorage.setItem(STORAGE_KEY_ACTIVE_GROUP, groupDataList[0].groupId);
+        }
+      } catch (err: any) {
+        console.error('[Groups] Error loading groups:', err);
+        setError(err.message || 'Failed to load groups');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadGroups();
   }, [uid]);
 
   const createGroup = async (name: string, emoji?: string): Promise<{ success: boolean; groupId?: string; error?: string }> => {
@@ -105,6 +167,19 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
       }
 
       setCreateGroupStep('OK');
+      
+      const newRoundRef = await addDoc(collection(db, 'groups', groupId, 'blitzRounds'), {
+        prompt: getRandomPrompt(),
+        status: 'waiting',
+        createdAt: Timestamp.now(),
+      });
+      console.log('[Groups] Created initial blitz round:', newRoundRef.id);
+      
+      if (!activeGroupId || activeGroupId === '' || groups.length === 0) {
+        setActiveGroupId(groupId);
+        await AsyncStorage.setItem(STORAGE_KEY_ACTIVE_GROUP, groupId);
+      }
+      
       return { success: true, groupId };
     } catch (err: any) {
       const errorMsg = err.message || 'Failed to create group';
@@ -157,51 +232,76 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
     }
 
     try {
-      const code = generateInviteCode();
-      console.log('[Groups] Generating invite code:', code, 'for group:', groupId);
-
-      await setDoc(doc(db, 'groups', groupId, 'inviteLinks', code), {
-        groupId,
-        createdBy: uid,
-        createdAt: Timestamp.now(),
-        active: true,
-      });
+      console.log('[Groups] Generating invite link for group:', groupId.slice(0, 8));
 
       const inviteLink = Linking.createURL('join', { 
-        queryParams: { groupId, code } 
+        queryParams: { groupId } 
       });
 
       console.log('[Groups] Invite link created:', inviteLink);
-      return { success: true, inviteLink, code };
+      setInviteLinkGenerated(inviteLink);
+      setInviteDocPath(`(no doc - just groupId in URL)`);
+      return { success: true, inviteLink };
     } catch (err: any) {
       console.error('[Groups] Error generating invite:', err);
       return { success: false, error: err.message || 'Failed to generate invite' };
     }
   };
 
-  const joinGroupByCode = async (groupId: string, code: string): Promise<{ success: boolean; groupId?: string; error?: string }> => {
+  const joinGroupByCode = async (groupId: string): Promise<{ success: boolean; groupId?: string; status?: string; error?: string }> => {
     if (!uid) {
       return { success: false, error: 'Not logged in' };
     }
 
     try {
-      console.log('[Groups] Joining group:', groupId, 'with code:', code);
+      console.log('[Groups] Creating invite request for group:', groupId.slice(0, 8));
       
-      const inviteDoc = await getDoc(doc(db, 'groups', groupId, 'inviteLinks', code));
+      await setDoc(doc(db, 'groups', groupId, 'invites', uid), {
+        createdBy: uid,
+        createdAt: Timestamp.now(),
+        status: 'pending',
+      });
+
+      console.log('[Groups] Invite request created, status: pending');
+      return { success: true, groupId, status: 'pending' };
+    } catch (err: any) {
+      console.error('[Groups] Error creating invite request:', err);
+      return { success: false, error: err.message || 'Failed to create invite request' };
+    }
+  };
+
+  const checkInviteStatus = async (groupId: string): Promise<{ status: string; error?: string }> => {
+    if (!uid) {
+      return { status: 'error', error: 'Not logged in' };
+    }
+
+    try {
+      const inviteDoc = await getDoc(doc(db, 'groups', groupId, 'invites', uid));
       
       if (!inviteDoc.exists()) {
-        return { success: false, error: 'Invalid invite link' };
+        return { status: 'missing' };
       }
 
       const inviteData = inviteDoc.data();
-      if (!inviteData.active) {
-        return { success: false, error: 'Invite link is no longer active' };
-      }
+      return { status: inviteData.status };
+    } catch (err: any) {
+      console.error('[Groups] Error checking invite status:', err);
+      return { status: 'error', error: err.message };
+    }
+  };
 
+  const completeJoin = async (groupId: string): Promise<{ success: boolean; error?: string }> => {
+    if (!uid) {
+      return { success: false, error: 'Not logged in' };
+    }
+
+    try {
+      console.log('[Groups] Completing join for approved invite:', groupId.slice(0, 8));
+      
       await setDoc(doc(db, 'groups', groupId, 'members', uid), {
         role: 'member',
         joinedAt: Timestamp.now(),
-      }, { merge: true });
+      });
 
       console.log('[Groups] Successfully joined group:', groupId);
       
@@ -224,11 +324,14 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
           if (exists) return prev;
           return [...prev, newGroup];
         });
+        
+        setActiveGroupId(groupId);
+        await AsyncStorage.setItem(STORAGE_KEY_ACTIVE_GROUP, groupId);
       }
 
-      return { success: true, groupId };
+      return { success: true };
     } catch (err: any) {
-      console.error('[Groups] Error joining group:', err);
+      console.error('[Groups] Error completing join:', err);
       return { success: false, error: err.message || 'Failed to join group' };
     }
   };
@@ -237,8 +340,15 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
     return groups.find((g) => g.groupId === groupId);
   };
 
+  const switchGroup = async (groupId: string) => {
+    setActiveGroupId(groupId);
+    await AsyncStorage.setItem(STORAGE_KEY_ACTIVE_GROUP, groupId);
+  };
+
   return {
     groups,
+    activeGroupId,
+    switchGroup,
     isLoading,
     error,
     lastCreateGroupError,
@@ -248,7 +358,11 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
     removeMemberFromGroup,
     generateInviteLink,
     joinGroupByCode,
+    checkInviteStatus,
+    completeJoin,
     getGroup,
     groupCount: groups.length,
+    inviteLinkGenerated,
+    inviteDocPath,
   };
 });

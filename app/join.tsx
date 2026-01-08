@@ -13,19 +13,20 @@ type JoinState = 'loading' | 'success' | 'error' | 'auth_required';
 export default function JoinScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { groupId, code } = useLocalSearchParams<{ groupId: string; code: string }>();
+  const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { uid } = useAuth();
-  const { joinGroupByCode } = useGroups();
+  const { joinGroupByCode, checkInviteStatus, completeJoin } = useGroups();
   
   const [state, setState] = useState<JoinState>('loading');
   const [error, setError] = useState<string>('');
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [joinedGroupId, setJoinedGroupId] = useState<string>('');
+  const [inviteStatus, setInviteStatus] = useState<string>('checking');
 
   useEffect(() => {
-    if (!groupId || !code) {
+    if (!groupId) {
       setState('error');
-      setError('Invalid invite link - missing groupId or code');
+      setError('Invalid invite link - missing groupId');
       return;
     }
 
@@ -37,29 +38,54 @@ export default function JoinScreen() {
 
     handleJoin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [uid, groupId, code]);
+  }, [uid, groupId]);
 
   const handleJoin = async () => {
-    if (!uid || !groupId || !code) return;
+    if (!uid || !groupId) return;
 
     setState('loading');
     setError('');
+    setInviteStatus('checking');
 
-    console.log('[Join] Attempting to join group:', groupId, 'with code:', code);
-    const result = await joinGroupByCode(groupId, code);
+    console.log('[Join] Checking invite status for group:', groupId.slice(0, 8));
+    const statusResult = await checkInviteStatus(groupId);
 
-    if (result.success) {
-      console.log('[Join] Successfully joined group');
-      setState('success');
-      setJoinedGroupId(result.groupId || groupId);
+    if (statusResult.status === 'approved') {
+      console.log('[Join] Invite approved, completing join');
+      setInviteStatus('approved');
+      const completeResult = await completeJoin(groupId);
       
-      setTimeout(() => {
-        router.replace('/(tabs)');
-      }, 1500);
-    } else {
-      console.error('[Join] Failed to join group:', result.error);
+      if (completeResult.success) {
+        setState('success');
+        setJoinedGroupId(groupId);
+        setTimeout(() => {
+          router.replace('/(tabs)');
+        }, 1500);
+      } else {
+        setState('error');
+        setError(completeResult.error || 'Failed to join group');
+      }
+    } else if (statusResult.status === 'pending') {
+      console.log('[Join] Invite pending approval');
+      setInviteStatus('pending');
       setState('error');
-      setError(result.error || 'Failed to join group');
+      setError('Invite request is pending admin approval. Check back later!');
+    } else if (statusResult.status === 'missing') {
+      console.log('[Join] No invite found, creating request');
+      setInviteStatus('creating');
+      const result = await joinGroupByCode(groupId);
+
+      if (result.success && result.status === 'pending') {
+        setInviteStatus('pending');
+        setState('error');
+        setError('Invite request sent! Waiting for admin approval.');
+      } else {
+        setState('error');
+        setError(result.error || 'Failed to create invite request');
+      }
+    } else {
+      setState('error');
+      setError(statusResult.error || 'Failed to check invite status');
     }
   };
 
@@ -80,8 +106,7 @@ export default function JoinScreen() {
               <ActivityIndicator size="large" color={Colors.dark.accent} />
               <Text style={styles.title}>Joining group...</Text>
               <View style={styles.debugInfo}>
-                <Text style={styles.debugText}>GroupId: {groupId?.slice(0, 8)}...</Text>
-                <Text style={styles.debugText}>Code: {code}</Text>
+                <Text style={styles.debugText}>Join: groupId={groupId?.slice(0, 8)}... status={inviteStatus}</Text>
                 <Text style={styles.debugText}>UserId: {uid?.slice(0, 8)}...</Text>
               </View>
             </>
@@ -100,9 +125,7 @@ export default function JoinScreen() {
                 <Text style={styles.buttonText}>Log In</Text>
               </TouchableOpacity>
               <View style={styles.debugInfo}>
-                <Text style={styles.debugText}>InviteLink source: firestore</Text>
-                <Text style={styles.debugText}>GroupId: {groupId?.slice(0, 8)}...</Text>
-                <Text style={styles.debugText}>Code: {code}</Text>
+                <Text style={styles.debugText}>Join: groupId={groupId?.slice(0, 8)}... status=auth_required</Text>
               </View>
             </>
           )}
@@ -132,8 +155,7 @@ export default function JoinScreen() {
                 <Text style={styles.buttonText}>Go to App</Text>
               </TouchableOpacity>
               <View style={styles.debugInfo}>
-                <Text style={styles.debugText}>GroupId: {groupId?.slice(0, 8) || 'missing'}</Text>
-                <Text style={styles.debugText}>Code: {code || 'missing'}</Text>
+                <Text style={styles.debugText}>Join: groupId={groupId?.slice(0, 8) || 'missing'} status={inviteStatus}</Text>
                 <Text style={styles.debugText}>Error: {error}</Text>
               </View>
             </>

@@ -4,6 +4,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppData } from '@/providers/AppDataProvider';
+import { useGroups } from '@/providers/GroupsProvider';
+import { useAuth } from '@/providers/AuthProvider';
 import GroupSwitcher from '@/components/GroupSwitcher';
 import PhotoContainer from '@/components/PhotoContainer';
 import BlitzLivePill from '@/components/BlitzLivePill';
@@ -13,21 +15,19 @@ import Colors from '@/constants/colors';
 export default function TodayScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { uid } = useAuth();
+  const { groups, activeGroupId, switchGroup } = useGroups();
   const {
-    groups,
-    activeGroupIdToday,
-    setActiveGroupIdToday,
     todayPhotosForGroup,
     updateTodayPhotoPosition,
     getBlitzRoundForGroup,
-    setActiveGroupIdBlitz,
     hasPostedToday,
   } = useAppData();
 
   const [blitzSecondsRemaining, setBlitzSecondsRemaining] = useState<number | null>(null);
   const [isDraggingPhoto, setIsDraggingPhoto] = useState(false);
 
-  const blitzRound = getBlitzRoundForGroup(activeGroupIdToday);
+  const blitzRound = getBlitzRoundForGroup(activeGroupId);
   const isBlitzLive = blitzRound?.status === 'live' && blitzRound?.endsAt;
 
   useEffect(() => {
@@ -48,9 +48,8 @@ export default function TodayScreen() {
 
   const handleBlitzPress = useCallback(() => {
     console.log('[Today] Navigating to Blitz tab');
-    setActiveGroupIdBlitz(activeGroupIdToday);
     router.push('/(tabs)/blitz');
-  }, [router, activeGroupIdToday, setActiveGroupIdBlitz]);
+  }, [router]);
 
   const formatDate = () => {
     const now = new Date();
@@ -86,7 +85,6 @@ export default function TodayScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-
       <ScrollView 
         style={styles.scrollView} 
         contentContainerStyle={styles.scrollContent}
@@ -98,12 +96,14 @@ export default function TodayScreen() {
           <Text style={styles.date}>{formatDate()}</Text>
         </View>
 
+        <Text style={styles.debugText}>GroupsLoaded: {groups.length} | activeGroupId: {activeGroupId?.slice(0, 8) || 'none'} | uid: {uid?.slice(0, 6) || 'none'}</Text>
+
         <GroupSwitcher
           groups={groups}
-          selectedGroupId={activeGroupIdToday}
+          selectedGroupId={activeGroupId}
           onSelectGroup={(groupId) => {
             console.log('[Today] Group switched to:', groupId);
-            setActiveGroupIdToday(groupId);
+            switchGroup(groupId);
           }}
         />
 
@@ -215,5 +215,11 @@ const styles = StyleSheet.create({
   },
   tapInButtonDisabled: {
     opacity: 0.5,
+  },
+  debugText: {
+    fontSize: 10,
+    color: Colors.dark.textSecondary,
+    marginBottom: 8,
+    fontFamily: 'monospace' as const,
   },
 });

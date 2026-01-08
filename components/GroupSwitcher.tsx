@@ -9,11 +9,11 @@ import {
   NativeScrollEvent,
   NativeSyntheticEvent,
 } from 'react-native';
-import { Group } from '@/types';
+import { GroupData } from '@/providers/GroupsProvider';
 import Colors from '@/constants/colors';
 
 interface GroupSwitcherProps {
-  groups: Group[];
+  groups: GroupData[];
   selectedGroupId: string;
   onSelectGroup: (groupId: string) => void;
 }
@@ -88,7 +88,7 @@ export default function GroupSwitcher({ groups, selectedGroupId, onSelectGroup }
     [onSelectGroup]
   );
 
-  const renderAvatars = useCallback((members: Group['members']) => {
+  const renderAvatars = useCallback((members: GroupData['members']) => {
     const displayMembers = members.slice(0, 3);
     const extraCount = members.length - 3;
 
@@ -96,7 +96,7 @@ export default function GroupSwitcher({ groups, selectedGroupId, onSelectGroup }
       <View style={styles.avatarsContainer}>
         {displayMembers.map((member, index) => (
           <View
-            key={member.userId}
+            key={member.uid}
             style={[
               styles.avatar,
               { 
@@ -106,7 +106,7 @@ export default function GroupSwitcher({ groups, selectedGroupId, onSelectGroup }
               },
             ]}
           >
-            <Text style={styles.avatarText}>{member.initials}</Text>
+            <Text style={styles.avatarText}>{member.email?.slice(0, 1).toUpperCase() || '?'}</Text>
           </View>
         ))}
         {extraCount > 0 && (
@@ -119,7 +119,7 @@ export default function GroupSwitcher({ groups, selectedGroupId, onSelectGroup }
   }, []);
 
   const renderItem = useCallback(
-    ({ item, index }: { item: Group; index: number }) => {
+    ({ item, index }: { item: GroupData; index: number }) => {
       const isSelected = item.groupId === selectedGroupId;
       
       return (
@@ -135,7 +135,7 @@ export default function GroupSwitcher({ groups, selectedGroupId, onSelectGroup }
             ]}
           >
             {item.emoji && <Text style={styles.emoji}>{item.emoji}</Text>}
-            <Text style={styles.groupName}>{item.groupName}</Text>
+            <Text style={styles.groupName}>{item.name}</Text>
             {renderAvatars(item.members)}
           </View>
         </TouchableOpacity>

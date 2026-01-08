@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Zap } from 'lucide-react-native';
 import { useAppData } from '@/providers/AppDataProvider';
+import { useGroups } from '@/providers/GroupsProvider';
+import { useAuth } from '@/providers/AuthProvider';
 import GroupSwitcher from '@/components/GroupSwitcher';
 import PhotoContainer from '@/components/PhotoContainer';
 
@@ -12,15 +14,13 @@ import Colors from '@/constants/colors';
 export default function BlitzScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { uid } = useAuth();
+  const { groups, activeGroupId, switchGroup } = useGroups();
   const {
-    groups,
-    activeGroupIdBlitz,
-    setActiveGroupIdBlitz,
     blitzPhotosForRound,
     currentBlitzRound,
     updateBlitzPhotoPosition,
     endBlitzRound,
-
   } = useAppData();
 
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(null);
@@ -41,14 +41,14 @@ export default function BlitzScreen() {
 
       if (remaining <= 0) {
         console.log('[Blitz] Round ended, creating new round');
-        endBlitzRound(activeGroupIdBlitz);
+        endBlitzRound(activeGroupId);
       }
     };
 
     updateTimer();
     const interval = setInterval(updateTimer, 1000);
     return () => clearInterval(interval);
-  }, [isLive, currentBlitzRound?.endsAt, activeGroupIdBlitz, endBlitzRound]);
+  }, [isLive, currentBlitzRound?.endsAt, activeGroupId, endBlitzRound]);
 
   const handleCameraPress = useCallback(() => {
     console.log('[Blitz] Opening camera');
@@ -63,7 +63,6 @@ export default function BlitzScreen() {
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-
       <ScrollView 
         style={styles.scrollView} 
         contentContainerStyle={styles.scrollContent}
@@ -83,12 +82,14 @@ export default function BlitzScreen() {
           )}
         </View>
 
+        <Text style={styles.debugText}>GroupsLoaded: {groups.length} | activeGroupId: {activeGroupId?.slice(0, 8) || 'none'} | uid: {uid?.slice(0, 6) || 'none'}</Text>
+
         <GroupSwitcher
           groups={groups}
-          selectedGroupId={activeGroupIdBlitz}
+          selectedGroupId={activeGroupId}
           onSelectGroup={(groupId) => {
             console.log('[Blitz] Group switched to:', groupId);
-            setActiveGroupIdBlitz(groupId);
+            switchGroup(groupId);
           }}
         />
 
@@ -257,5 +258,11 @@ const styles = StyleSheet.create({
     color: Colors.dark.blitzYellow,
     fontSize: 24,
     fontWeight: '700' as const,
+  },
+  debugText: {
+    fontSize: 10,
+    color: Colors.dark.textSecondary,
+    marginBottom: 8,
+    fontFamily: 'monospace' as const,
   },
 });
