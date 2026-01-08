@@ -26,9 +26,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           await setDoc(
             doc(db, 'users', firebaseUser.uid), 
             {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email,
-              lastSeenAt: serverTimestamp(),
+              displayName: firebaseUser.displayName || '',
+              photoURL: firebaseUser.photoURL || '',
+              createdAt: serverTimestamp(),
             },
             { merge: true }
           );
@@ -51,10 +51,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       const result = await createUserWithEmailAndPassword(auth, email, password);
       
       await setDoc(doc(db, 'users', result.user.uid), {
-        uid: result.user.uid,
-        email: result.user.email,
+        displayName: result.user.displayName || '',
+        photoURL: result.user.photoURL || '',
         createdAt: serverTimestamp(),
-        lastSeenAt: serverTimestamp(),
       });
       
       console.log('[Auth] Account created:', result.user.uid);

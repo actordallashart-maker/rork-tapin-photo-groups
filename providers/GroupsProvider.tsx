@@ -3,8 +3,6 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
 import { 
   collection, 
-  query, 
-  where, 
   getDocs, 
   doc, 
   setDoc, 
@@ -12,6 +10,7 @@ import {
   serverTimestamp,
   onSnapshot,
   addDoc,
+  deleteDoc,
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
@@ -51,59 +50,51 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
     const loadGroups = async () => {
       try {
-        const membershipsRef = collection(db, 'groupMembers');
-        const q = query(membershipsRef, where('uid', '==', uid));
-        const snap = await getDocs(q);
+        const allGroupsSnap = await getDocs(collection(db, 'groups'));
+        const myGroups: GroupData[] = [];
 
-        const groupIds = snap.docs.map((doc) => doc.data().groupId);
-        console.log('[Groups] Found group memberships:', groupIds);
+        for (const groupDoc of allGroupsSnap.docs) {
+          const groupId = groupDoc.id;
+          const groupData = groupDoc.data();
 
-        if (groupIds.length === 0) {
-          setGroups([]);
-          setIsLoading(false);
-          return;
+          const memberDoc = await getDoc(
+            doc(db, 'groups', groupId, 'members', uid)
+          );
+
+          if (!memberDoc.exists()) continue;
+
+          const membersSnap = await getDocs(
+            collection(db, 'groups', groupId, 'members')
+          );
+
+          const members = await Promise.all(
+            membersSnap.docs.map(async (memberDoc): Promise<GroupMemberData | null> => {
+              const memberData = memberDoc.data();
+              const memberUid = memberDoc.id;
+              const userDoc = await getDoc(doc(db, 'users', memberUid));
+              if (!userDoc.exists()) return null;
+
+              const userData = userDoc.data();
+              return {
+                uid: memberUid,
+                email: userData.email || memberUid,
+                username: userData.displayName,
+                role: memberData.role as 'owner' | 'member',
+              } as GroupMemberData;
+            })
+          );
+
+          myGroups.push({
+            groupId,
+            name: groupData.name,
+            emoji: groupData.emoji,
+            createdBy: groupData.createdBy,
+            members: members.filter((m): m is GroupMemberData => m !== null),
+          });
         }
 
-        const groupsData = await Promise.all(
-          groupIds.map(async (groupId): Promise<GroupData | null> => {
-            const groupDoc = await getDoc(doc(db, 'groups', groupId));
-            if (!groupDoc.exists()) return null;
-
-            const groupData = groupDoc.data();
-
-            const membersSnap = await getDocs(
-              query(collection(db, 'groupMembers'), where('groupId', '==', groupId))
-            );
-
-            const members = await Promise.all(
-              membersSnap.docs.map(async (memberDoc): Promise<GroupMemberData | null> => {
-                const memberData = memberDoc.data();
-                const userDoc = await getDoc(doc(db, 'users', memberData.uid));
-                if (!userDoc.exists()) return null;
-
-                const userData = userDoc.data();
-                return {
-                  uid: memberData.uid,
-                  email: userData.email || '',
-                  username: userData.username,
-                  role: memberData.role as 'owner' | 'member',
-                } as GroupMemberData;
-              })
-            );
-
-            return {
-              groupId,
-              name: groupData.name,
-              emoji: groupData.emoji,
-              createdBy: groupData.createdBy,
-              members: members.filter((m): m is GroupMemberData => m !== null),
-            } as GroupData;
-          })
-        );
-
-        const validGroups = groupsData.filter((g): g is GroupData => g !== null);
-        console.log('[Groups] Loaded groups:', validGroups.length);
-        setGroups(validGroups);
+        console.log('[Groups] Loaded groups:', myGroups.length);
+        setGroups(myGroups);
         setIsLoading(false);
       } catch (err) {
         console.error('[Groups] Error loading groups:', err);
@@ -114,9 +105,8 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
     loadGroups();
 
-    const membershipsRef = collection(db, 'groupMembers');
-    const q = query(membershipsRef, where('uid', '==', uid));
-    const unsubscribe = onSnapshot(q, () => {
+    const groupsRef = collection(db, 'groups');
+    const unsubscribe = onSnapshot(groupsRef, () => {
       loadGroups();
     });
 
@@ -139,11 +129,9 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
       const groupId = groupRef.id;
 
-      await setDoc(doc(db, 'groupMembers', `${groupId}_${uid}`), {
-        groupId,
-        uid,
-        role: 'owner',
-        createdAt: serverTimestamp(),
+      await setDoc(doc(db, 'groups', groupId, 'members', uid), {
+        role: 'admin',
+        joinedAt: serverTimestamp(),
       });
 
       console.log('[Groups] Group created:', groupId);
@@ -161,11 +149,9 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
     try {
       console.log('[Groups] Adding member to group:', groupId, memberUid);
-      await setDoc(doc(db, 'groupMembers', `${groupId}_${memberUid}`), {
-        groupId,
-        uid: memberUid,
+      await setDoc(doc(db, 'groups', groupId, 'members', memberUid), {
         role: 'member',
-        createdAt: serverTimestamp(),
+        joinedAt: serverTimestamp(),
       }, { merge: true });
 
       return { success: true };
@@ -182,8 +168,8 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
     try {
       console.log('[Groups] Removing member from group:', groupId, memberUid);
-      const memberDocRef = doc(db, 'groupMembers', `${groupId}_${memberUid}`);
-      await setDoc(memberDocRef, { active: false }, { merge: true });
+      const memberDocRef = doc(db, 'groups', groupId, 'members', memberUid);
+      await deleteDoc(memberDocRef);
 
       return { success: true };
     } catch (err) {
@@ -201,12 +187,10 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
       const code = generateInviteCode();
       console.log('[Groups] Generating invite code:', code);
 
-      await setDoc(doc(db, 'groupInvites', code), {
-        code,
-        groupId,
+      await setDoc(doc(db, 'groups', groupId, 'invites', code), {
         createdBy: uid,
         createdAt: serverTimestamp(),
-        active: true,
+        status: 'pending',
       });
 
       const appUrl = process.env.EXPO_PUBLIC_APP_URL || 'https://tapin.app';
@@ -226,24 +210,31 @@ export const [GroupsProvider, useGroups] = createContextHook(() => {
 
     try {
       console.log('[Groups] Joining group with code:', code);
-      const inviteDoc = await getDoc(doc(db, 'groupInvites', code));
+      const groupsSnap = await getDocs(collection(db, 'groups'));
+      let inviteDoc: any = null;
+      let groupId: string | null = null;
 
-      if (!inviteDoc.exists()) {
+      for (const gDoc of groupsSnap.docs) {
+        const invDoc = await getDoc(doc(db, 'groups', gDoc.id, 'invites', code));
+        if (invDoc.exists()) {
+          inviteDoc = invDoc;
+          groupId = gDoc.id;
+          break;
+        }
+      }
+
+      if (!inviteDoc || !groupId) {
         return { success: false, error: 'Invalid invite code' };
       }
 
       const inviteData = inviteDoc.data();
-      if (!inviteData.active) {
-        return { success: false, error: 'Invite code expired' };
+      if (inviteData.status !== 'approved') {
+        return { success: false, error: 'Invite must be approved by admin first' };
       }
 
-      const groupId = inviteData.groupId;
-
-      await setDoc(doc(db, 'groupMembers', `${groupId}_${uid}`), {
-        groupId,
-        uid,
+      await setDoc(doc(db, 'groups', groupId, 'members', uid), {
         role: 'member',
-        createdAt: serverTimestamp(),
+        joinedAt: serverTimestamp(),
       }, { merge: true });
 
       return { success: true, groupId };
